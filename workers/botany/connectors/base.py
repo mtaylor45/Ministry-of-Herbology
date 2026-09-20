@@ -89,11 +89,37 @@ class TaxonRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class FactRecord:
+    """One source's answer about one field of the care profile.
+
+    ``field`` is a column on ``species`` (``min_temp_c``, ``soil_ph_min``,
+    ``toxic_to_pets``, ``summary`` …) so synthesis never has to translate names.
+
+    ``value`` is what we would publish; ``raw`` is what the source literally
+    said, before any unit conversion or vocabulary mapping. Both are kept: the
+    raw form is what an auditor checks the conversion against, and no field is
+    ever filled from anything but a payload.
+    """
+
+    field: str
+    value: object
+    source_kind: str
+    unit: str | None = None
+    #: Exactly what the source said, pre-conversion (``'-43'`` °F, ``'Severe'``).
+    raw: object = None
+    #: How the value was arrived at, for the audit trail and the UI's tooltip.
+    note: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ConnectorResult:
     """What one connector came back with, including the citation for it."""
 
     kind: str
     records: tuple[TaxonRecord, ...] = ()
+    #: Care-profile facts (S2). A taxon connector returns none and vice versa;
+    #: one shape carries both so the registry and the citation path are shared.
+    facts: tuple[FactRecord, ...] = ()
     #: One per call made. Kept even when a call returned nothing, so an empty
     #: answer is as auditable as a full one.
     sources: tuple[SourceRecord, ...] = ()
@@ -106,6 +132,25 @@ class ConnectorResult:
         return self.error is None
 
 
+@dataclass(frozen=True, slots=True)
+class SpeciesRef:
+    """What enrichment knows about a species before it asks anybody.
+
+    The output of S1 resolution, and the input to every S2 connector: they look
+    a species up by the name an authority accepted, not by what was typed.
+    """
+
+    accepted_name: str
+    common_name: str | None = None
+    family: str | None = None
+    genus: str | None = None
+    gbif_key: str | None = None
+    powo_id: str | None = None
+    #: Set once Wikipedia has been asked; Wikidata reuses it rather than
+    #: searching again.
+    wikidata_id: str | None = None
+
+
 @runtime_checkable
 class Connector(Protocol):
     """A source that can be asked to resolve a name."""
@@ -113,6 +158,15 @@ class Connector(Protocol):
     kind: str
 
     async def resolve(self, parsed: ParsedName) -> ConnectorResult: ...
+
+
+@runtime_checkable
+class EnrichmentConnector(Protocol):
+    """A source that can be asked what it knows about a resolved species."""
+
+    kind: str
+
+    async def enrich(self, species: SpeciesRef) -> ConnectorResult: ...
 
 
 #: Connector factories by source kind, so S2 adds a module and a registration
