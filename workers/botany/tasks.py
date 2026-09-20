@@ -1,13 +1,18 @@
 """Botanical knowledge worker — Workstream D.
 
-S0 skeleton. Taxon resolution lands in S1; the source connectors and cited care
-synthesis in S2. ADR 0004 governs everything here: this worker may rank and
-select among sourced values and may write prose, but it may never originate a
-number.
+Taxon resolution landed in S1; the remaining source connectors and the cited
+care synthesis land in S2. ADR 0004 governs everything here: this worker may
+rank and select among sourced values and may write prose, but it may never
+originate a number.
+
+This module holds the two things every part of the worker shares — the source
+precedence table and the confidence arithmetic — plus the Arq jobs. The pieces
+live next door: ``names`` parses what was typed, ``connectors/`` asks the
+sources, ``resolve`` ranks what they said.
 """
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, ClassVar
 
 #: Preference order when two sources disagree about the same field. Taxonomic
 #: authorities outrank aggregators; an aggregator outranks an encyclopaedia.
@@ -30,6 +35,26 @@ CONFIDENCE_BY_RANK = {
     4: "medium",
     5: "medium",
 }
+
+#: Best to worst. ADR 0004 allows exactly these four, and the database enforces
+#: them with a CHECK.
+CONFIDENCE_ORDER = ("high", "medium", "low", "unknown")
+
+
+def downgrade(confidence: str, steps: int = 1) -> str:
+    """Lower a confidence by ``steps``, never below ``unknown``.
+
+    The only direction this arithmetic runs. Doubt about a source, a fuzzy match
+    or a disagreement may lower what we claim; nothing raises it, because there
+    is no evidence that arrives by inference.
+    """
+    if steps <= 0:
+        return confidence
+    try:
+        index = CONFIDENCE_ORDER.index(confidence)
+    except ValueError:
+        return "unknown"
+    return CONFIDENCE_ORDER[min(index + steps, len(CONFIDENCE_ORDER) - 1)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,8 +85,18 @@ def choose(values: list[SourcedValue]) -> tuple[SourcedValue | None, str]:
     return best, confidence
 
 
-async def resolve_taxon(ctx: dict, name: str) -> None:  # pragma: no cover - S1
-    raise NotImplementedError("S1 (D): POWO/GBIF taxon resolution")
+async def resolve_taxon(ctx: dict, name: str) -> list[dict[str, Any]]:
+    """S1: a typed name in, ranked accepted names out, each with a citation.
+
+    The Arq entry point. ``ctx`` may carry a prepared ``resolver`` (the API does,
+    so one process keeps one HTTP client and one payload cache); otherwise one is
+    built from the settings.
+    """
+    from .factory import get_resolver
+
+    resolver = ctx.get("resolver") or get_resolver()
+    resolution = await resolver.resolve(name)
+    return resolution.to_list()
 
 
 async def enrich_species(ctx: dict, species_id: str) -> None:  # pragma: no cover - S2
