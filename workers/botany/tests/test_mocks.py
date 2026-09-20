@@ -2,8 +2,8 @@
 
 import json
 
-from botany.mocks import RecordedFetcher, build_mock_connectors
-from botany.mocks.fetcher import RECORDED_ON, recording_name, slug
+from workers.botany.mocks import RecordedFetcher, build_mock_connectors
+from workers.botany.mocks.fetcher import RECORDED_ON, recording_name, slug
 
 
 def test_a_query_maps_to_a_filename_the_same_way_every_time():
@@ -84,7 +84,7 @@ def test_powo_says_nothing_it_was_not_recorded_saying(run):
 
 
 def test_a_fixture_species_still_resolves_end_to_end(run):
-    from botany.resolve import TaxonResolver
+    from workers.botany.resolve import TaxonResolver
 
     resolution = run(TaxonResolver(build_mock_connectors()).resolve("Rosa gallica"))
     assert resolution.candidates[0].accepted_name == "Rosa gallica"

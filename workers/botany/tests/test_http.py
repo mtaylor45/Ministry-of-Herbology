@@ -7,8 +7,9 @@ with something that is not taxonomy.
 """
 
 import pytest
-from botany.connectors.http import HttpFetcher, SourceUnavailable
-from botany.settings import BotanySettings
+
+from workers.botany.connectors.http import HttpFetcher, SourceUnavailable
+from workers.botany.settings import BotanySettings
 
 
 class StubResponse:

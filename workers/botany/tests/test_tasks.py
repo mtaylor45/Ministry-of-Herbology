@@ -1,6 +1,6 @@
 """The precedence table and the confidence arithmetic every other module shares."""
 
-from botany.tasks import (
+from workers.botany.tasks import (
     CONFIDENCE_ORDER,
     SOURCE_RANK,
     SourcedValue,

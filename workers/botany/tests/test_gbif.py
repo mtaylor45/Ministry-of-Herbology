@@ -1,12 +1,12 @@
 """GBIF parsing, against payloads recorded from the live API."""
 
-from botany.connectors.gbif import (
+from workers.botany.connectors.gbif import (
     needs_vernacular_lookup,
     parse_match,
     parse_search,
     parse_vernacular_names,
 )
-from botany.names import parse_name
+from workers.botany.names import parse_name
 
 
 def test_an_exact_match_carries_the_key_the_family_and_the_rank(payload):

@@ -19,16 +19,13 @@ from typing import Any, TypeVar
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-WORKERS_DIR = REPO_ROOT / "workers"
 
-# Imported as ``botany.*`` rather than ``workers.botany.*``. ``workers/`` is not
-# a package — it has no ``__init__.py``, and it belongs to no single workstream —
-# so the two spellings are two names for one file, which mypy rightly refuses to
-# check twice. This is the name mypy maps these files to; production reaches the
-# same modules as ``workers.botany.*`` with the repository root on the path
-# (``PYTHONPATH=/srv/api:/srv`` in ``infra/docker/worker.Dockerfile``).
-if str(WORKERS_DIR) not in sys.path:
-    sys.path.insert(0, str(WORKERS_DIR))
+# ``workers.botany.*`` is the one name these modules have: ``workers/__init__.py``
+# makes it a package (ADR 0011), and it is how the Arq worker and the API reach
+# them (``PYTHONPATH=/srv/api:/srv`` in the images). One file, one module name —
+# which is also what lets ``mypy api/app workers`` complete a run.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 T = TypeVar("T")
 
@@ -77,7 +74,7 @@ def spec() -> dict[str, Any]:
 
 @pytest.fixture
 def resolver():
-    from botany.factory import build_resolver
+    from workers.botany.factory import build_resolver
 
     return build_resolver()
 

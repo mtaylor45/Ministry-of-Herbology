@@ -1,9 +1,10 @@
 """``POST /taxon/resolve`` on the wire, checked against the frozen contract."""
 
 import pytest
-from botany.router import router
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from workers.botany.router import router
 
 CONTRACT_PATH = "/taxon/resolve"
 
@@ -57,18 +58,25 @@ def test_the_required_fields_are_always_present(client, candidate_schema):
         assert candidate["confidence"] in {"high", "medium", "low", "unknown"}
 
 
-def test_the_only_field_outside_the_contract_is_the_cultivar(client, candidate_schema):
-    """Flagged for Workstream A: ``TaxonCandidate`` has nowhere to put a cultivar.
+def test_the_response_carries_no_field_the_contract_does_not_declare(
+    client, candidate_schema
+):
+    """``cultivar`` is contractual as of ADR 0012, so nothing here is off-schema.
 
-    POWO and GBIF index species; ``'Hidcote'`` is split off the typed name and has
-    to reach the caller somehow, because ``specimen.cultivar`` is where it lands.
-    The schema does not forbid extra properties, so this is additive.
+    POWO and GBIF index species; ``'Hidcote'`` is split off the typed name and
+    reaches the caller in its own field, because ``specimen.cultivar`` is where
+    it lands.
     """
+    assert "cultivar" in candidate_schema["properties"]
+    for name in ("Lavandula angustifolia 'Hidcote'", "mandrake", "Monstera deliciosa"):
+        for candidate in client.post(
+            "/api/v1/taxon/resolve", json={"name": name}
+        ).json():
+            assert set(candidate) <= set(candidate_schema["properties"]), candidate
+
     body = client.post(
         "/api/v1/taxon/resolve", json={"name": "Lavandula angustifolia 'Hidcote'"}
     ).json()
-    extra = set(body[0]) - set(candidate_schema["properties"])
-    assert extra == {"cultivar"}
     assert body[0]["cultivar"] == "Hidcote"
 
 
@@ -99,9 +107,9 @@ def test_a_photo_beside_a_name_still_resolves_the_name(client):
 
 
 def test_every_source_being_down_is_a_503_not_an_empty_list(client, monkeypatch):
-    from botany import factory
-    from botany.names import parse_name
-    from botany.resolve import Resolution, TaxonResolver
+    from workers.botany import factory
+    from workers.botany.names import parse_name
+    from workers.botany.resolve import Resolution, TaxonResolver
 
     class DownResolver(TaxonResolver):
         async def resolve(self, name):
@@ -112,7 +120,7 @@ def test_every_source_being_down_is_a_503_not_an_empty_list(client, monkeypatch)
             )
 
     monkeypatch.setattr(factory, "get_resolver", lambda: DownResolver([]))
-    monkeypatch.setattr("botany.router.get_resolver", lambda: DownResolver([]))
+    monkeypatch.setattr("workers.botany.router.get_resolver", lambda: DownResolver([]))
     response = client.post("/api/v1/taxon/resolve", json={"name": "Monstera deliciosa"})
     assert response.status_code == 503
 
@@ -130,12 +138,12 @@ def test_the_route_is_exactly_the_one_the_contract_declares(client, spec):
 
 
 def test_the_contract_still_lists_this_route_as_unimplemented(repo_root):
-    """Landing it needs three one-line changes in three other workstreams' files.
+    """The route is ready; mounting it is Workstream A's commit, not D's.
 
-    ``api/app/main.py`` (A) mounts the router, ``infra/docker/api.Dockerfile`` (B)
-    ships ``workers/`` into the API image, and the exemption below (L) goes. Rule
-    2 says D may not make any of those edits, so this test states the handoff
-    rather than pretending it happened.
+    ``api/app/main.py`` includes the router and the exemption below goes, in one
+    change — either alone turns the contract job red. Until then this states the
+    handoff rather than pretending it happened, and it fails the moment A lands
+    it, which is the point.
     """
     text = (repo_root / "tests" / "contract" / "test_api_matches_spec.py").read_text()
     assert '("post", "/taxon/resolve"): "S1 (D)"' in text
