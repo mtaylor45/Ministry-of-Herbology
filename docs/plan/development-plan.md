@@ -66,7 +66,8 @@ subscription.
 - Plant groups and beds; photo growth log; pest/disease and repotting logs.
 - Household members with task completion attribution; notifications.
 - Seasonal and dormancy adjustments to care.
-- Soil moisture sensors (Ecowitt, MiFlora via HA) as watering overrides.
+- Soil moisture sensors (Ecowitt, MiFlora via HA) as watering overrides — supported,
+  but no such hardware exists yet (ADR 0010).
 - Journal plates from public-domain sources first, AI-generated fallback in one
   consistent style.
 - Mobile-first installable PWA with offline care instructions.
@@ -268,7 +269,7 @@ S4; v1.0 ships at the end of S10.
 | S2 | Enrichment | Wikipedia, Wikidata, USDA, Perenual connectors; cited care synthesis; toxicity (D); Specimen page with Register, Tending, Compendium facets (J) | A new plant auto-fills summary and care with sources in under 60s |
 | S3 | Environment | Open-Meteo forecast and history ingest; Timescale rollups (E); HA adapter with Nest readings (F); Almanac 1-day and 10-day views (J) | Indoor and outdoor readings stored every 5–15 min; forecast visible |
 | S4 | Scheduling (MVP) | Care rules to tasks, recurrences, completion logging (G); Morning Rounds with batch completion (J); HA notifications (F); ICS feed with filters and deep links (G) | Daily care runs from the app and tasks appear in the calendar |
-| S5 | Smart watering | Water-balance engine, "satisfied by rain" state (E, G); soil sensor override (F); drought and storm scenario tests (L) | Scenario suite passes; rain visibly clears due waterings |
+| S5 | Smart watering | Water-balance engine, "satisfied by rain" state (E, G); soil sensor override kept and proved against fixtures, no hardware (F, ADR 0010); drought and storm scenario tests (L) | Scenario suite passes; rain visibly clears due waterings |
 | S6 | Frost guard | Per-species thresholds, 72h lookahead, NWS advisories (E); bring-indoors and return tasks with relocation flow (G, J); frost calendar events and cancellation behavior (G); 7-day and 30-day history charts (J) | Frost scenario raises alert, task, calendar event, and updates location on completion |
 | S7 | Maps | Plan and survey upload with calibration, zone drawing, pins (H); map and Specimen cross-links (J) | Every specimen can be pinned; tapping a pin opens its Specimen page |
 | S8 | Journal | Public-domain plate sourcing, AI fallback pipeline, style guide (K); journal facet and book view, field notes, photo growth log (K, J) | Each specimen has an approved plate; the book view pages through all |
@@ -282,8 +283,10 @@ These need answers before the sprint that depends on them. Tracked in
 
 - ~~Paid APIs acceptable?~~ **Answered: free sources only** (ADR 0007).
   Perenual and generated plates stay behind disabled feature flags.
-- Nest route: HA Nest integration (SDM API) or Matter? **Needed by S3.**
+- ~~Nest route: HA Nest integration (SDM API) or Matter?~~ **Answered: neither.
+  Indoor conditions come from Home Assistant** (ADR 0009).
 - Survey format: PDF plat, CAD file, or satellite image only? **Needed by S7.**
 - ~~Separate logins per household member, or one shared login with a member
   picker?~~ **Answered: shared login with a member picker** (ADR 0008).
-- Any irrigation hardware to control (e.g. Rachio via HA)? If yes, add to S9 or v1.1.
+- ~~Any irrigation hardware to control?~~ **Answered: none today, and no
+  soil-moisture hardware either. Keep the seams for both** (ADR 0010).
