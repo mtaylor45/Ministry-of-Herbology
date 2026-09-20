@@ -12,7 +12,6 @@ NOT_YET_IMPLEMENTED = {
     ("post", "/specimens/{specimen_id}/photos"): "S2 (C)",
     ("post", "/specimens/{specimen_id}/log"): "S2 (C)",
     ("put", "/species/{species_id}/care-values"): "S2 (D)",
-    ("post", "/taxon/resolve"): "S1 (D)",
     ("post", "/tending/tasks/{task_id}/complete"): "S4 (G)",
     ("post", "/tending/tasks/complete-batch"): "S4 (G)",
     ("post", "/tending/care-rules"): "S4 (G)",
@@ -31,11 +30,22 @@ NOT_YET_IMPLEMENTED = {
 }
 
 
-def _implemented_routes(client) -> set[tuple[str, str]]:
-    """What the app actually serves, taken from the OpenAPI document it generates.
+#: Routes served on purpose but kept out of the OpenAPI document. Each is an
+#: operational endpoint with no client contract, and each is listed here so the
+#: exemption is reviewed rather than invisible: `include_in_schema=False` hides
+#: a route from the generated document, so a document-to-document comparison
+#: alone cannot see it — which is the one thing rule 1 exists to catch.
+UNDOCUMENTED_ON_PURPOSE = {
+    ("get", "/taxon/sources"): "D — which sources this deployment is asking",
+}
 
-    Reading ``app.routes`` misses routes nested inside included routers, so we
-    compare document to document instead.
+
+def _implemented_routes(client) -> set[tuple[str, str]]:
+    """What the app actually serves.
+
+    Reading ``app.routes`` misses routes nested inside included routers, so the
+    generated document is the base; `_served_routes` then adds anything hidden
+    from it.
     """
     served = client.app.openapi()["paths"]
     return {
@@ -46,6 +56,29 @@ def _implemented_routes(client) -> set[tuple[str, str]]:
     }
 
 
+def _served_routes(client) -> set[tuple[str, str]]:
+    """Every route the app answers, documented or not, walking nested routers."""
+    found: set[tuple[str, str]] = set()
+
+    def walk(routes) -> None:
+        for route in routes:
+            # An included router is wrapped; its own routes hang off
+            # `original_router` and carry paths without the mount prefix.
+            nested = getattr(route, "routes", None) or getattr(
+                getattr(route, "original_router", None), "routes", None
+            )
+            if nested:
+                walk(nested)
+            path = getattr(route, "path", None)
+            if not path:
+                continue
+            for method in getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}:
+                found.add((method.lower(), path.removeprefix("/api/v1")))
+
+    walk(client.app.routes)
+    return found
+
+
 def _contract_routes(spec) -> set[tuple[str, str]]:
     return {
         (method, path)
@@ -53,6 +86,36 @@ def _contract_routes(spec) -> set[tuple[str, str]]:
         for method in item
         if method in {"get", "post", "put", "patch", "delete"}
     }
+
+
+def test_no_undocumented_route_is_served_without_being_declared_here(client, spec):
+    """A route hidden from the OpenAPI document is still a route people can call."""
+    framework = {
+        ("get", "/docs"),
+        ("get", "/openapi.json"),
+        ("get", "/redoc"),
+        ("get", "/docs/oauth2-redirect"),
+        ("get", "/healthz"),
+    }
+    hidden = (
+        _served_routes(client)
+        - _implemented_routes(client)
+        - _contract_routes(spec)
+        - framework
+    )
+    assert not hidden - set(UNDOCUMENTED_ON_PURPOSE), (
+        f"served but in neither the contract nor UNDOCUMENTED_ON_PURPOSE: "
+        f"{sorted(hidden - set(UNDOCUMENTED_ON_PURPOSE))}. Declare it in the "
+        "contract via an ADR, or list it as a deliberate operational endpoint."
+    )
+
+
+def test_undocumented_exemptions_are_actually_served(client):
+    """Stop that list outliving the endpoints it excuses."""
+    stale = set(UNDOCUMENTED_ON_PURPOSE) - _served_routes(client)
+    assert (
+        not stale
+    ), f"UNDOCUMENTED_ON_PURPOSE names routes nobody serves: {sorted(stale)}"
 
 
 def test_no_route_exists_outside_the_contract(client, spec):
