@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any, TypeVar
@@ -20,12 +19,12 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-# ``workers.botany.*`` is the one name these modules have: ``workers/__init__.py``
-# makes it a package (ADR 0011), and it is how the Arq worker and the API reach
-# them (``PYTHONPATH=/srv/api:/srv`` in the images). One file, one module name —
-# which is also what lets ``mypy api/app workers`` complete a run.
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# The repository-root ``conftest.py`` puts both source roots on ``sys.path``;
+# this file deliberately does not do it again. A second copy of that mechanism
+# is how the root one broke unnoticed before: the job that collected
+# ``workers/`` loaded this conftest and imported fine, while the job that did
+# not collect it failed — which made a repository-wide problem look like one
+# workstream's. One mechanism, one place to fix.
 
 T = TypeVar("T")
 
