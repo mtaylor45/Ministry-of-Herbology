@@ -1,0 +1,116 @@
+/* Design tokens — Workstream I, S0 deliverable.
+ *
+ * Two themes: `parchment` (light) and `greenhouse` (dark). Every colour pair
+ * used for text on a surface meets WCAG AA at body size; the checks live in
+ * web/src/lib/ui/contrast.test.ts so a token change cannot silently break it.
+ *
+ * Display faces are for headings only (ADR 0005). Body text is a readable serif.
+ */
+
+:root,
+:root[data-theme='parchment'] {
+  /* surfaces */
+  --moh-surface: #f4ecd8;
+  --moh-surface-raised: #fbf6e9;
+  --moh-surface-sunken: #e7dcc2;
+  --moh-border: #947f50;
+
+  /* ink */
+  --moh-ink: #2a2118;
+  --moh-ink-muted: #5c5142;
+  --moh-ink-inverse: #f7f2e4;
+
+  /* the greenhouse greens */
+  --moh-accent: #2f4a36;
+  --moh-accent-hover: #3d6146;
+  --moh-accent-ink: #f7f2e4;
+
+  /* status — each has a plain meaning attached in copy, never colour alone */
+  --moh-parched: #8a4b1e; /* needs water */
+  --moh-sated: #1f5e73; /* rain covered it */
+  --moh-frost: #3f5f8a; /* frost alert */
+  --moh-thriving: #3a6b3f;
+  --moh-ailing: #8a2f2f;
+
+  /* type */
+  --moh-font-display: 'IM Fell English', 'Cinzel', Georgia, serif;
+  --moh-font-body: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --moh-font-mono: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* a 1.25 modular scale, 16px base */
+  --moh-text-xs: 0.64rem;
+  --moh-text-sm: 0.8rem;
+  --moh-text-base: 1rem;
+  --moh-text-lg: 1.25rem;
+  --moh-text-xl: 1.5625rem;
+  --moh-text-2xl: 1.953rem;
+  --moh-text-3xl: 2.441rem;
+
+  /* spacing, on a 4px grid */
+  --moh-space-1: 0.25rem;
+  --moh-space-2: 0.5rem;
+  --moh-space-3: 0.75rem;
+  --moh-space-4: 1rem;
+  --moh-space-6: 1.5rem;
+  --moh-space-8: 2rem;
+  --moh-space-12: 3rem;
+
+  --moh-radius: 6px;
+  --moh-radius-lg: 12px;
+  --moh-shadow: 0 1px 2px rgb(42 33 24 / 0.12), 0 4px 12px rgb(42 33 24 / 0.08);
+
+  /* a touch target never smaller than this; the app is used outdoors, one-handed */
+  --moh-tap: 44px;
+}
+
+:root[data-theme='greenhouse'] {
+  --moh-surface: #141a15;
+  --moh-surface-raised: #1d261e;
+  --moh-surface-sunken: #0d110e;
+  --moh-border: #647a67;
+
+  --moh-ink: #e8e4d6;
+  --moh-ink-muted: #a9a695;
+  --moh-ink-inverse: #141a15;
+
+  --moh-accent: #7fb08a;
+  --moh-accent-hover: #96c6a0;
+  --moh-accent-ink: #0d110e;
+
+  --moh-parched: #d99a63;
+  --moh-sated: #7ec5dd;
+  --moh-frost: #9dbbe6;
+  --moh-thriving: #8fc795;
+  --moh-ailing: #e08a8a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='parchment']) {
+    --moh-surface: #141a15;
+    --moh-surface-raised: #1d261e;
+    --moh-surface-sunken: #0d110e;
+    --moh-border: #647a67;
+    --moh-ink: #e8e4d6;
+    --moh-ink-muted: #a9a695;
+    --moh-ink-inverse: #141a15;
+    --moh-accent: #7fb08a;
+    --moh-accent-hover: #96c6a0;
+    --moh-accent-ink: #0d110e;
+    --moh-parched: #d99a63;
+    --moh-sated: #7ec5dd;
+    --moh-frost: #9dbbe6;
+    --moh-thriving: #8fc795;
+    --moh-ailing: #e08a8a;
+  }
+}
+
+/* Whimsy at moments only, and never against the user's wishes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

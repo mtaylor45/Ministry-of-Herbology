@@ -1,0 +1,1346 @@
+openapi: 3.1.0
+info:
+  title: The Ministry of Herbology API
+  version: 1.0.0
+  description: |
+    Contract for the Ministry of Herbology. Frozen in S0 — only Workstream A
+    changes this file, via an ADR. Every path declares the workstream that
+    implements it with `x-workstream`; `tests/contract/` enforces that the
+    running API matches this document.
+
+    Units: millimetres, °C, litres, lux. Timestamps are RFC 3339 UTC.
+servers:
+  - url: /api/v1
+tags:
+  - name: inventory
+    description: Specimens, locations, members (Workstream C)
+  - name: botany
+    description: Species, taxon resolution, care values (Workstream D)
+  - name: almanac
+    description: Weather, forecast, conditions history (Workstream E)
+  - name: tending
+    description: Care rules, tasks, calendar feeds (Workstream G)
+  - name: grounds
+    description: Map layers, zones, pins (Workstream H)
+  - name: journal
+    description: Plates and field notes (Workstream K)
+  - name: hub
+    description: Sensors and integrations (Workstream F)
+
+paths:
+  # ---------------------------------------------------------------- inventory
+  /specimens:
+    get:
+      tags: [inventory]
+      x-workstream: C
+      summary: List and search specimens
+      operationId: listSpecimens
+      parameters:
+        - { name: q,           in: query, schema: { type: string } }
+        - { name: location_id, in: query, schema: { type: string, format: uuid } }
+        - { name: outdoor,     in: query, schema: { type: boolean } }
+        - { name: status,      in: query, schema: { $ref: '#/components/schemas/SpecimenStatus' } }
+        - { name: toxic_to_pets, in: query, schema: { type: boolean } }
+        - { name: limit,  in: query, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: A page of specimens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SpecimenPage' }
+    post:
+      tags: [inventory]
+      x-workstream: C
+      summary: Add a plant. Enrichment is queued and runs in the background.
+      operationId: createSpecimen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SpecimenCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Specimen' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /specimens/{specimen_id}:
+    parameters:
+      - { name: specimen_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [inventory]
+      x-workstream: C
+      operationId: getSpecimen
+      responses:
+        '200':
+          description: One specimen
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Specimen' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [inventory]
+      x-workstream: C
+      operationId: updateSpecimen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SpecimenUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Specimen' }
+    delete:
+      tags: [inventory]
+      x-workstream: C
+      summary: Archive a specimen (soft delete)
+      operationId: archiveSpecimen
+      responses:
+        '204': { description: Archived }
+
+  /specimens/{specimen_id}/photos:
+    parameters:
+      - { name: specimen_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [inventory]
+      x-workstream: C
+      operationId: listPhotos
+      responses:
+        '200':
+          description: Growth log photos, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Photo' }
+    post:
+      tags: [inventory]
+      x-workstream: C
+      operationId: uploadPhoto
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:    { type: string, format: binary }
+                caption: { type: string }
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Photo' }
+
+  /specimens/{specimen_id}/log:
+    parameters:
+      - { name: specimen_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [inventory]
+      x-workstream: C
+      operationId: listLogEntries
+      responses:
+        '200':
+          description: Log entries, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LogEntry' }
+    post:
+      tags: [inventory]
+      x-workstream: C
+      operationId: createLogEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogEntryCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LogEntry' }
+
+  /locations:
+    get:
+      tags: [inventory]
+      x-workstream: C
+      operationId: listLocations
+      parameters:
+        - { name: site_id, in: query, schema: { type: string, format: uuid } }
+        - { name: outdoor, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: The site → area → zone tree, flattened
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Location' }
+    post:
+      tags: [inventory]
+      x-workstream: C
+      operationId: createLocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LocationCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Location' }
+
+  /locations/{location_id}:
+    parameters:
+      - { name: location_id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [inventory]
+      x-workstream: C
+      operationId: updateLocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LocationCreate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Location' }
+
+  /members:
+    get:
+      tags: [inventory]
+      x-workstream: C
+      operationId: listMembers
+      responses:
+        '200':
+          description: Household members
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Member' }
+
+  # ------------------------------------------------------------------- botany
+  /species:
+    get:
+      tags: [botany]
+      x-workstream: D
+      operationId: listSpecies
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Known species
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Species' }
+
+  /species/{species_id}:
+    parameters:
+      - { name: species_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [botany]
+      x-workstream: D
+      operationId: getSpecies
+      responses:
+        '200':
+          description: Species with its cited care profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Species' }
+
+  /species/{species_id}/care-values:
+    parameters:
+      - { name: species_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [botany]
+      x-workstream: D
+      summary: Every care field with its source and confidence
+      operationId: listCareValues
+      responses:
+        '200':
+          description: Cited care values
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CareValue' }
+    put:
+      tags: [botany]
+      x-workstream: D
+      summary: User override of a care value
+      operationId: overrideCareValue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CareValueOverride' }
+      responses:
+        '200':
+          description: Stored override
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareValue' }
+
+  /taxon/resolve:
+    post:
+      tags: [botany]
+      x-workstream: D
+      summary: Resolve a typed name or photo to an accepted scientific name
+      operationId: resolveTaxon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:      { type: string, description: Common or scientific name }
+                image_key: { type: string, description: Uploaded photo for Pl@ntNet ID }
+      responses:
+        '200':
+          description: Ranked candidate matches
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TaxonCandidate' }
+
+  # ------------------------------------------------------------------ almanac
+  /almanac/forecast:
+    get:
+      tags: [almanac]
+      x-workstream: E
+      summary: 1-day (hourly) and 10-day (daily) forecast
+      operationId: getForecast
+      parameters:
+        - { name: site_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - name: horizon
+          in: query
+          schema: { type: string, enum: [hourly, daily], default: daily }
+      responses:
+        '200':
+          description: Forecast series
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ForecastPoint' }
+
+  /almanac/history:
+    get:
+      tags: [almanac]
+      x-workstream: E
+      summary: 1 / 7 / 30-day indoor and outdoor conditions history
+      operationId: getHistory
+      parameters:
+        - name: window
+          in: query
+          required: true
+          schema: { type: string, enum: ['1d', '7d', '30d'] }
+        - { name: site_id,     in: query, schema: { type: string, format: uuid } }
+        - { name: location_id, in: query, schema: { type: string, format: uuid } }
+        - { name: specimen_id, in: query, schema: { type: string, format: uuid } }
+        - name: metric
+          in: query
+          schema:
+            type: string
+            enum: [temperature_c, humidity_pct, soil_moisture_pct, precip_mm, et0_mm]
+      responses:
+        '200':
+          description: Bucketed series ready for uPlot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Series' }
+
+  /almanac/water-balance/{specimen_id}:
+    parameters:
+      - { name: specimen_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [almanac]
+      x-workstream: E
+      summary: Soil water deficit history and current state
+      operationId: getWaterBalance
+      responses:
+        '200':
+          description: Water balance
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WaterBalance' }
+
+  /almanac/frost:
+    get:
+      tags: [almanac]
+      x-workstream: E
+      summary: Open frost alerts within the 72h lookahead
+      operationId: listFrostAlerts
+      responses:
+        '200':
+          description: Frost alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FrostAlert' }
+
+  # ------------------------------------------------------------------ tending
+  /tending/rounds:
+    get:
+      tags: [tending]
+      x-workstream: G
+      summary: Morning Rounds — what needs doing today
+      operationId: getMorningRounds
+      parameters:
+        - { name: 'on', in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Today's tasks, grouped
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MorningRounds' }
+
+  /tending/tasks:
+    get:
+      tags: [tending]
+      x-workstream: G
+      operationId: listTasks
+      parameters:
+        - { name: status,      in: query, schema: { $ref: '#/components/schemas/TaskStatus' } }
+        - { name: specimen_id, in: query, schema: { type: string, format: uuid } }
+        - { name: due_before,  in: query, schema: { type: string, format: date-time } }
+        - { name: due_after,   in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Task' }
+
+  /tending/tasks/{task_id}/complete:
+    parameters:
+      - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [tending]
+      x-workstream: G
+      summary: One-tap completion
+      operationId: completeTask
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskCompletion' }
+      responses:
+        '200':
+          description: Completed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+
+  /tending/tasks/complete-batch:
+    post:
+      tags: [tending]
+      x-workstream: G
+      summary: Batch completion from Morning Rounds
+      operationId: completeTasks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_ids]
+              properties:
+                task_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                completed_by: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Completed tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Task' }
+
+  /tending/care-rules:
+    get:
+      tags: [tending]
+      x-workstream: G
+      operationId: listCareRules
+      parameters:
+        - { name: specimen_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Care rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CareRule' }
+    post:
+      tags: [tending]
+      x-workstream: G
+      operationId: createCareRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CareRule' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CareRule' }
+
+  /tending/feeds:
+    get:
+      tags: [tending]
+      x-workstream: G
+      summary: Calendar feeds for the household
+      operationId: listCalendarFeeds
+      responses:
+        '200':
+          description: Feeds
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CalendarFeed' }
+    post:
+      tags: [tending]
+      x-workstream: G
+      summary: Create a tokenized ICS feed for a member and filter set
+      operationId: createCalendarFeed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CalendarFeedCreate' }
+      responses:
+        '201':
+          description: Created; `webcal_url` is subscribable in Google and Apple Calendar
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarFeed' }
+
+  /tending/feeds/{feed_id}/revoke:
+    parameters:
+      - { name: feed_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [tending]
+      x-workstream: G
+      operationId: revokeCalendarFeed
+      responses:
+        '204': { description: Revoked }
+
+  /calendar/{token}.ics:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [tending]
+      x-workstream: G
+      summary: The ICS feed itself. Unauthenticated — the token is the secret.
+      operationId: getCalendarIcs
+      security: []
+      responses:
+        '200':
+          description: iCalendar document
+          content:
+            text/calendar:
+              schema: { type: string }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ------------------------------------------------------------------ grounds
+  /grounds/layers:
+    get:
+      tags: [grounds]
+      x-workstream: H
+      operationId: listMapLayers
+      responses:
+        '200':
+          description: Floor plans and property surveys
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MapLayer' }
+    post:
+      tags: [grounds]
+      x-workstream: H
+      summary: Upload a floor plan or survey image
+      operationId: createMapLayer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:    { type: string, format: binary }
+                name:    { type: string }
+                kind:    { type: string, enum: [floor_plan, survey] }
+                site_id: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MapLayer' }
+
+  /grounds/layers/{layer_id}/calibration:
+    parameters:
+      - { name: layer_id, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [grounds]
+      x-workstream: H
+      summary: Set the pixel↔world calibration points (survey) or px→mm scale (plan)
+      operationId: setCalibration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Calibration' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MapLayer' }
+
+  /grounds/pins:
+    get:
+      tags: [grounds]
+      x-workstream: H
+      summary: Every specimen pin on a layer
+      operationId: listPins
+      parameters:
+        - { name: layer_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Pins
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Pin' }
+    put:
+      tags: [grounds]
+      x-workstream: H
+      summary: Place or move a specimen's pin
+      operationId: setPin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Pin' }
+      responses:
+        '200':
+          description: Placed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pin' }
+
+  # ------------------------------------------------------------------ journal
+  /journal/plates:
+    get:
+      tags: [journal]
+      x-workstream: K
+      operationId: listPlates
+      parameters:
+        - { name: approved, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Plates for the book view
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Plate' }
+
+  /journal/{specimen_id}/notes:
+    parameters:
+      - { name: specimen_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [journal]
+      x-workstream: K
+      operationId: listFieldNotes
+      responses:
+        '200':
+          description: Field notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FieldNote' }
+    post:
+      tags: [journal]
+      x-workstream: K
+      operationId: createFieldNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FieldNote' }
+
+  # ---------------------------------------------------------------------- hub
+  /hub/sensors:
+    get:
+      tags: [hub]
+      x-workstream: F
+      operationId: listSensorSources
+      responses:
+        '200':
+          description: Configured sensor sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SensorSource' }
+    post:
+      tags: [hub]
+      x-workstream: F
+      operationId: createSensorSource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensorSource' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SensorSource' }
+
+  /hub/integrations:
+    get:
+      tags: [hub]
+      x-workstream: F
+      summary: Integration health for the Ministry Office
+      operationId: listIntegrations
+      responses:
+        '200':
+          description: Integrations with last-ok and last-error
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Integration' }
+
+  /hub/lunette:
+    get:
+      tags: [hub]
+      x-workstream: F
+      summary: Compact payload for the Lunette e-ink display
+      operationId: getLunetteFeed
+      responses:
+        '200':
+          description: Today's rounds, weather and alerts, rendered small
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LunetteFeed' }
+
+  /healthz:
+    get:
+      summary: Liveness
+      operationId: healthz
+      security: []
+      x-workstream: B
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:           { type: string }
+                  contract_version: { type: string }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: moh_session
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+        code:   { type: string }
+
+    Confidence:
+      type: string
+      enum: [high, medium, low, unknown]
+
+    SpecimenStatus:
+      type: string
+      enum: [thriving, struggling, dormant, overwintering, lost, given_away, archived]
+
+    TaskStatus:
+      type: string
+      enum: [due, done, satisfied, skipped, cancelled]
+
+    TaskType:
+      type: string
+      enum: [water, fertilize, mist, prune, repot, inspect,
+             bring_indoors, return_outdoors, cover, rotate]
+
+    SunExposure:
+      type: string
+      enum: [full_sun, part_sun, part_shade, full_shade, unknown]
+
+    Member:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:   { type: string, format: uuid }
+        name: { type: string }
+        role: { type: string, enum: [keeper, tender, observer] }
+        notify_prefs: { type: object, additionalProperties: true }
+
+    Location:
+      type: object
+      required: [id, name, kind, is_outdoor]
+      properties:
+        id:           { type: string, format: uuid }
+        site_id:      { type: string, format: uuid }
+        parent_id:    { type: [string, 'null'], format: uuid }
+        name:         { type: string }
+        kind:         { type: string, enum: [area, zone, bed, room, shelf] }
+        is_outdoor:   { type: boolean }
+        is_covered:   { type: boolean }
+        sun_exposure: { $ref: '#/components/schemas/SunExposure' }
+        map_layer_id: { type: [string, 'null'], format: uuid }
+        boundary_px:
+          type: [array, 'null']
+          items:
+            type: array
+            items: { type: number }
+        specimen_count: { type: integer, readOnly: true }
+
+    LocationCreate:
+      type: object
+      required: [name, kind, is_outdoor]
+      properties:
+        site_id:      { type: string, format: uuid }
+        parent_id:    { type: [string, 'null'], format: uuid }
+        name:         { type: string }
+        kind:         { type: string, enum: [area, zone, bed, room, shelf] }
+        is_outdoor:   { type: boolean }
+        is_covered:   { type: boolean, default: false }
+        sun_exposure: { $ref: '#/components/schemas/SunExposure' }
+
+    Specimen:
+      type: object
+      required: [id, is_outdoor, status, display_name]
+      properties:
+        id:              { type: string, format: uuid }
+        display_name:    { type: string, description: 'nickname, else common name, else accepted name' }
+        nickname:        { type: [string, 'null'] }
+        cultivar:        { type: [string, 'null'] }
+        species:         { $ref: '#/components/schemas/SpeciesBrief' }
+        is_group:        { type: boolean }
+        count:           { type: integer }
+        location:        { $ref: '#/components/schemas/Location' }
+        map_layer_id:    { type: [string, 'null'], format: uuid }
+        pin_px:          { $ref: '#/components/schemas/PixelPoint' }
+        is_outdoor:      { type: boolean }
+        in_container:    { type: boolean }
+        container_litres: { type: [number, 'null'] }
+        soil_note:       { type: [string, 'null'] }
+        acquired_on:     { type: [string, 'null'], format: date }
+        provenance:      { type: [string, 'null'] }
+        status:          { $ref: '#/components/schemas/SpecimenStatus' }
+        primary_photo_url: { type: [string, 'null'] }
+        next_task:       { $ref: '#/components/schemas/TaskBrief' }
+        created_at:      { type: string, format: date-time }
+
+    SpecimenBrief:
+      type: object
+      required: [id, display_name]
+      properties:
+        id:           { type: string, format: uuid }
+        display_name: { type: string }
+        is_outdoor:   { type: boolean }
+        thumb_url:    { type: [string, 'null'] }
+
+    SpecimenCreate:
+      type: object
+      required: [name]
+      properties:
+        name:         { type: string, description: Typed name; resolved to a species }
+        species_id:   { type: string, format: uuid, description: Skip resolution }
+        image_key:    { type: string, description: Photo for Pl@ntNet identification }
+        nickname:     { type: string }
+        cultivar:     { type: string }
+        location_id:  { type: string, format: uuid }
+        in_container: { type: boolean, default: true }
+        container_litres: { type: number }
+        count:        { type: integer, default: 1 }
+        acquired_on:  { type: string, format: date }
+
+    SpecimenUpdate:
+      type: object
+      properties:
+        nickname:        { type: [string, 'null'] }
+        cultivar:        { type: [string, 'null'] }
+        location_id:     { type: [string, 'null'], format: uuid }
+        in_container:    { type: boolean }
+        container_litres: { type: [number, 'null'] }
+        soil_note:       { type: [string, 'null'] }
+        status:          { $ref: '#/components/schemas/SpecimenStatus' }
+        notes:           { type: [string, 'null'] }
+        water_k_c_override:           { type: [number, 'null'] }
+        water_interval_days_override: { type: [integer, 'null'] }
+        min_temp_c_override:          { type: [number, 'null'] }
+
+    SpecimenPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Specimen' }
+        next_cursor: { type: [string, 'null'] }
+        total:       { type: integer }
+
+    SpeciesBrief:
+      type: object
+      properties:
+        id:            { type: string, format: uuid }
+        accepted_name: { type: string }
+        common_name:   { type: [string, 'null'] }
+        family:        { type: [string, 'null'] }
+
+    Species:
+      allOf:
+        - $ref: '#/components/schemas/SpeciesBrief'
+        - type: object
+          properties:
+            common_names:     { type: array, items: { type: string } }
+            genus:            { type: [string, 'null'] }
+            native_range:     { type: array, items: { type: string } }
+            summary:          { type: [string, 'null'] }
+            light_label:      { type: [string, 'null'] }
+            water_k_c:        { type: [number, 'null'] }
+            water_interval_days: { type: [integer, 'null'] }
+            soil_ph_min:      { type: [number, 'null'] }
+            soil_ph_max:      { type: [number, 'null'] }
+            fertilizer_note:  { type: [string, 'null'] }
+            humidity_min_pct: { type: [integer, 'null'] }
+            min_temp_c:       { type: [number, 'null'] }
+            usda_zone_min:    { type: [string, 'null'] }
+            usda_zone_max:    { type: [string, 'null'] }
+            dormancy_months:  { type: array, items: { type: integer } }
+            toxic_to_pets:     { type: [boolean, 'null'] }
+            toxic_to_children: { type: [boolean, 'null'] }
+            toxicity_note:    { type: [string, 'null'] }
+            enrichment_state: { type: string, enum: [pending, running, complete, failed] }
+            sources:
+              type: array
+              items: { $ref: '#/components/schemas/SourceRef' }
+
+    SourceRef:
+      type: object
+      required: [id, kind, title]
+      properties:
+        id:      { type: string, format: uuid }
+        kind:    { type: string }
+        title:   { type: string }
+        url:     { type: [string, 'null'] }
+        license: { type: [string, 'null'] }
+        retrieved_at: { type: string, format: date-time }
+
+    CareValue:
+      type: object
+      required: [field, value, confidence]
+      description: |
+        Rule 6 in the working agreement — no invented plant facts. A value with
+        no `source` must carry `confidence: unknown` unless it is a user override.
+      properties:
+        id:         { type: string, format: uuid }
+        field:      { type: string, example: water_k_c }
+        value:      {}
+        unit:       { type: [string, 'null'] }
+        source:     { $ref: '#/components/schemas/SourceRef' }
+        confidence: { $ref: '#/components/schemas/Confidence' }
+        is_user_override: { type: boolean }
+        note:       { type: [string, 'null'] }
+
+    CareValueOverride:
+      type: object
+      required: [field, value]
+      properties:
+        field: { type: string }
+        value: {}
+        unit:  { type: string }
+        note:  { type: string }
+
+    TaxonCandidate:
+      type: object
+      required: [accepted_name, confidence]
+      properties:
+        accepted_name: { type: string }
+        common_name:   { type: [string, 'null'] }
+        family:        { type: [string, 'null'] }
+        rank:          { type: string }
+        gbif_key:      { type: [string, 'null'] }
+        powo_id:       { type: [string, 'null'] }
+        score:         { type: number }
+        confidence:    { $ref: '#/components/schemas/Confidence' }
+        source:        { $ref: '#/components/schemas/SourceRef' }
+
+    ForecastPoint:
+      type: object
+      required: [time]
+      properties:
+        time:            { type: string, format: date-time }
+        temperature_c:   { type: [number, 'null'] }
+        temp_min_c:      { type: [number, 'null'] }
+        temp_max_c:      { type: [number, 'null'] }
+        precip_mm:       { type: [number, 'null'] }
+        precip_prob_pct: { type: [number, 'null'] }
+        et0_mm:          { type: [number, 'null'] }
+        wind_kph:        { type: [number, 'null'] }
+        condition:       { type: [string, 'null'] }
+        sunrise:         { type: [string, 'null'], format: date-time }
+        sunset:          { type: [string, 'null'], format: date-time }
+
+    Series:
+      type: object
+      description: Column-oriented, ready to hand straight to uPlot.
+      required: [metric, times, values]
+      properties:
+        metric: { type: string }
+        unit:   { type: string }
+        times:  { type: array, items: { type: integer }, description: Unix seconds }
+        values: { type: array, items: { type: [number, 'null'] } }
+        min:    { type: array, items: { type: [number, 'null'] } }
+        max:    { type: array, items: { type: [number, 'null'] } }
+        label:  { type: string }
+
+    WaterBalance:
+      type: object
+      required: [specimen_id, deficit_mm, threshold_mm, is_due]
+      properties:
+        specimen_id:  { type: string, format: uuid }
+        deficit_mm:   { type: number }
+        capacity_mm:  { type: number }
+        threshold_mm: { type: number }
+        k_c:          { type: number }
+        is_due:       { type: boolean }
+        sensor_override_pct: { type: [number, 'null'] }
+        days:
+          type: array
+          items:
+            type: object
+            properties:
+              day:           { type: string, format: date }
+              deficit_mm:    { type: number }
+              et0_mm:        { type: number }
+              precip_mm:     { type: number }
+              irrigation_mm: { type: number }
+
+    FrostAlert:
+      type: object
+      required: [id, specimen, night_of, forecast_low_c, threshold_c, action]
+      properties:
+        id:             { type: string, format: uuid }
+        specimen:       { $ref: '#/components/schemas/SpecimenBrief' }
+        night_of:       { type: string, format: date }
+        forecast_low_c: { type: number }
+        threshold_c:    { type: number }
+        action:         { type: string, enum: [bring_indoors, cover, monitor] }
+        advisory:       { type: [string, 'null'], description: 'NWS headline, if any' }
+        task_id:        { type: [string, 'null'], format: uuid }
+        state:          { type: string, enum: [open, resolved, expired] }
+
+    TaskBrief:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        task_type:   { $ref: '#/components/schemas/TaskType' }
+        due_at:      { type: string, format: date-time }
+        status:      { $ref: '#/components/schemas/TaskStatus' }
+        plain_title: { type: string }
+
+    Task:
+      type: object
+      required: [id, specimen, task_type, due_at, status, title, plain_title]
+      properties:
+        id:          { type: string, format: uuid }
+        specimen:    { $ref: '#/components/schemas/SpecimenBrief' }
+        task_type:   { $ref: '#/components/schemas/TaskType' }
+        due_at:      { type: string, format: date-time }
+        all_day:     { type: boolean }
+        status:      { $ref: '#/components/schemas/TaskStatus' }
+        satisfied_by: { type: [string, 'null'], enum: [rain, sensor, forecast_change, manual, null] }
+        amount_ml:   { type: [integer, 'null'] }
+        priority:    { type: string, enum: [low, normal, urgent] }
+        title:       { type: string, description: 'Themed, e.g. "Tend the Monstera"' }
+        plain_title: { type: string, description: 'Plain equivalent, e.g. "Water the Monstera — 500 ml"' }
+        detail:      { type: [string, 'null'] }
+        completed_at: { type: [string, 'null'], format: date-time }
+        completed_by: { $ref: '#/components/schemas/Member' }
+        deep_link:   { type: string, description: '/specimen/{id}/tending' }
+
+    TaskCompletion:
+      type: object
+      properties:
+        completed_by: { type: string, format: uuid }
+        amount_ml:    { type: integer }
+        notes:        { type: string }
+        new_location_id:
+          type: string
+          format: uuid
+          description: Set when completing a bring_indoors task
+
+    MorningRounds:
+      type: object
+      required: [date, due, satisfied, alerts]
+      properties:
+        date:      { type: string, format: date }
+        greeting:  { type: string }
+        due:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        satisfied:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+          description: Waterings the rain or a sensor already covered
+        alerts:
+          type: array
+          items: { $ref: '#/components/schemas/FrostAlert' }
+        weather: { $ref: '#/components/schemas/ForecastPoint' }
+
+    CareRule:
+      type: object
+      required: [task_type, strategy]
+      properties:
+        id:          { type: string, format: uuid }
+        species_id:  { type: [string, 'null'], format: uuid }
+        specimen_id: { type: [string, 'null'], format: uuid }
+        task_type:   { $ref: '#/components/schemas/TaskType' }
+        strategy:    { type: string, enum: [interval, water_balance, frost_guard, seasonal] }
+        base_interval_days: { type: [integer, 'null'] }
+        amount_ml:   { type: [integer, 'null'] }
+        modifiers:   { type: object, additionalProperties: true }
+        months:      { type: array, items: { type: integer } }
+        enabled:     { type: boolean }
+
+    CalendarFeed:
+      type: object
+      required: [id, name, webcal_url]
+      properties:
+        id:         { type: string, format: uuid }
+        member_id:  { type: string, format: uuid }
+        name:       { type: string }
+        webcal_url: { type: string, description: 'webcal://host/api/v1/calendar/{token}.ics' }
+        https_url:  { type: string }
+        filters:    { $ref: '#/components/schemas/CalendarFilters' }
+        push_target: { type: string, enum: [none, google, caldav] }
+        last_rendered_at: { type: [string, 'null'], format: date-time }
+        revoked:    { type: boolean }
+
+    CalendarFeedCreate:
+      type: object
+      required: [member_id, name]
+      properties:
+        member_id: { type: string, format: uuid }
+        name:      { type: string }
+        filters:   { $ref: '#/components/schemas/CalendarFilters' }
+        push_target: { type: string, enum: [none, google, caldav], default: none }
+
+    CalendarFilters:
+      type: object
+      properties:
+        outdoor:      { type: [boolean, 'null'] }
+        task_types:
+          type: array
+          items: { $ref: '#/components/schemas/TaskType' }
+        location_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    PixelPoint:
+      type: [object, 'null']
+      properties:
+        x: { type: number }
+        y: { type: number }
+
+    MapLayer:
+      type: object
+      required: [id, name, kind, image_url, image_width_px, image_height_px]
+      properties:
+        id:              { type: string, format: uuid }
+        site_id:         { type: string, format: uuid }
+        name:            { type: string }
+        kind:            { type: string, enum: [floor_plan, survey] }
+        image_url:       { type: string }
+        image_width_px:  { type: integer }
+        image_height_px: { type: integer }
+        scale_mm_per_px: { type: [number, 'null'] }
+        calibration:     { $ref: '#/components/schemas/Calibration' }
+        ordinal:         { type: integer }
+
+    Calibration:
+      type: object
+      description: |
+        Floor plans use CRS.Simple and need only `scale_mm_per_px`. Surveys need
+        at least two pixel↔world point pairs to be georeferenced.
+      properties:
+        scale_mm_per_px: { type: [number, 'null'] }
+        points:
+          type: array
+          items:
+            type: object
+            required: [px, world]
+            properties:
+              px:    { type: array, items: { type: number }, minItems: 2, maxItems: 2 }
+              world: { type: array, items: { type: number }, minItems: 2, maxItems: 2 }
+
+    Pin:
+      type: object
+      required: [specimen_id, layer_id, px]
+      properties:
+        specimen_id: { type: string, format: uuid }
+        layer_id:    { type: string, format: uuid }
+        px:          { $ref: '#/components/schemas/PixelPoint' }
+        specimen:    { $ref: '#/components/schemas/SpecimenBrief' }
+
+    Plate:
+      type: object
+      required: [id, image_url, origin]
+      properties:
+        id:          { type: string, format: uuid }
+        species_id:  { type: [string, 'null'], format: uuid }
+        specimen_id: { type: [string, 'null'], format: uuid }
+        image_url:   { type: string }
+        thumb_url:   { type: [string, 'null'] }
+        origin:      { type: string, enum: [public_domain, generated, user_upload] }
+        license:     { type: [string, 'null'] }
+        attribution: { type: [string, 'null'] }
+        approved:    { type: boolean }
+
+    FieldNote:
+      type: object
+      required: [id, body, written_at]
+      properties:
+        id:         { type: string, format: uuid }
+        body:       { type: string }
+        written_at: { type: string, format: date-time }
+        written_by: { $ref: '#/components/schemas/Member' }
+
+    Photo:
+      type: object
+      required: [id, url, taken_at]
+      properties:
+        id:         { type: string, format: uuid }
+        url:        { type: string }
+        thumb_url:  { type: [string, 'null'] }
+        taken_at:   { type: string, format: date-time }
+        caption:    { type: [string, 'null'] }
+        is_primary: { type: boolean }
+
+    LogEntry:
+      type: object
+      required: [id, kind, occurred_at]
+      properties:
+        id:          { type: string, format: uuid }
+        kind:        { type: string, enum: [growth, pest, disease, repot, prune, relocate, note] }
+        occurred_at: { type: string, format: date-time }
+        body:        { type: [string, 'null'] }
+        photo:       { $ref: '#/components/schemas/Photo' }
+        data:        { type: object, additionalProperties: true }
+
+    LogEntryCreate:
+      type: object
+      required: [kind]
+      properties:
+        kind:        { type: string, enum: [growth, pest, disease, repot, prune, relocate, note] }
+        body:        { type: string }
+        occurred_at: { type: string, format: date-time }
+        photo_id:    { type: string, format: uuid }
+
+    SensorSource:
+      type: object
+      required: [name, adapter]
+      properties:
+        id:           { type: string, format: uuid }
+        name:         { type: string }
+        adapter:      { type: string, enum: [home_assistant, ecowitt, miflora, homekit, nest, manual] }
+        external_ids: { type: object, additionalProperties: { type: string } }
+        location_id:  { type: [string, 'null'], format: uuid }
+        specimen_id:  { type: [string, 'null'], format: uuid }
+        poll_seconds: { type: integer }
+        enabled:      { type: boolean }
+        last_seen_at: { type: [string, 'null'], format: date-time }
+
+    Integration:
+      type: object
+      required: [id, kind, name, enabled]
+      properties:
+        id:         { type: string, format: uuid }
+        kind:       { type: string }
+        name:       { type: string }
+        enabled:    { type: boolean }
+        last_ok_at: { type: [string, 'null'], format: date-time }
+        last_error: { type: [string, 'null'] }
+
+    LunetteFeed:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        headline:     { type: string }
+        due_count:    { type: integer }
+        lines:        { type: array, items: { type: string } }
+        temp_outdoor_c: { type: [number, 'null'] }
+        temp_indoor_c:  { type: [number, 'null'] }
+        frost_warning:  { type: [string, 'null'] }
+
+security:
+  - session: []
