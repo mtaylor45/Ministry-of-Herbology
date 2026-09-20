@@ -9,13 +9,8 @@ below, so adding one is a deliberate act with a sprint attached.
 #: Paths the contract declares but no workstream has built yet. Each entry names
 #: the sprint that removes it. Shrinking this list is how S0 becomes S10.
 NOT_YET_IMPLEMENTED = {
-    ("post", "/specimens"): "S1 (C)",
-    ("patch", "/specimens/{specimen_id}"): "S1 (C)",
-    ("delete", "/specimens/{specimen_id}"): "S1 (C)",
     ("post", "/specimens/{specimen_id}/photos"): "S2 (C)",
     ("post", "/specimens/{specimen_id}/log"): "S2 (C)",
-    ("post", "/locations"): "S1 (C)",
-    ("patch", "/locations/{location_id}"): "S1 (C)",
     ("put", "/species/{species_id}/care-values"): "S2 (D)",
     ("post", "/taxon/resolve"): "S1 (D)",
     ("post", "/tending/tasks/{task_id}/complete"): "S4 (G)",
