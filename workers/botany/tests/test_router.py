@@ -137,13 +137,18 @@ def test_the_route_is_exactly_the_one_the_contract_declares(client, spec):
     assert spec["paths"][CONTRACT_PATH]["post"]["x-workstream"] == "D"
 
 
-def test_the_contract_still_lists_this_route_as_unimplemented(repo_root):
-    """The route is ready; mounting it is Workstream A's commit, not D's.
-
-    ``api/app/main.py`` includes the router and the exemption below goes, in one
-    change — either alone turns the contract job red. Until then this states the
-    handoff rather than pretending it happened, and it fails the moment A lands
-    it, which is the point.
+def test_the_route_is_mounted_and_no_longer_exempt(repo_root):
+    """The handoff D staged has landed: Workstream A mounted the router and
+    struck the exemption in one commit, as either alone turns the contract job
+    red. This was a tripwire asserting the handoff was still pending; it now
+    asserts it completed, so a revert of either half is caught here too.
     """
-    text = (repo_root / "tests" / "contract" / "test_api_matches_spec.py").read_text()
-    assert '("post", "/taxon/resolve"): "S1 (D)"' in text
+    exemptions = (
+        repo_root / "tests" / "contract" / "test_api_matches_spec.py"
+    ).read_text()
+    assert (
+        '("post", "/taxon/resolve")' not in exemptions
+    ), "the route is served; it must not be listed as unimplemented"
+
+    main = (repo_root / "api" / "app" / "main.py").read_text()
+    assert "botany_router" in main, "api/app/main.py must mount the botany router"
