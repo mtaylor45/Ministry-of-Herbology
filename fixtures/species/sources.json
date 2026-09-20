@@ -1,0 +1,50 @@
+[
+  {
+    "id": "01890020-0000-7000-8000-000000000001",
+    "kind": "powo",
+    "title": "Plants of the World Online \u2014 Monstera deliciosa",
+    "url": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:87458-1",
+    "license": "CC BY 4.0",
+    "retrieved_at": "2026-09-15T12:00:00Z"
+  },
+  {
+    "id": "01890020-0000-7000-8000-000000000002",
+    "kind": "gbif",
+    "title": "GBIF Backbone Taxonomy",
+    "url": "https://www.gbif.org/species/2872082",
+    "license": "CC BY 4.0",
+    "retrieved_at": "2026-09-15T12:00:00Z"
+  },
+  {
+    "id": "01890020-0000-7000-8000-000000000003",
+    "kind": "wikipedia",
+    "title": "Wikipedia \u2014 Monstera deliciosa",
+    "url": "https://en.wikipedia.org/wiki/Monstera_deliciosa",
+    "license": "CC BY-SA 4.0",
+    "retrieved_at": "2026-09-15T12:00:00Z"
+  },
+  {
+    "id": "01890020-0000-7000-8000-000000000004",
+    "kind": "usda",
+    "title": "USDA PLANTS Database",
+    "url": "https://plants.usda.gov/",
+    "license": "Public domain",
+    "retrieved_at": "2026-09-15T12:00:00Z"
+  },
+  {
+    "id": "01890020-0000-7000-8000-000000000005",
+    "kind": "wikidata",
+    "title": "Wikidata",
+    "url": "https://www.wikidata.org/",
+    "license": "CC0",
+    "retrieved_at": "2026-09-15T12:00:00Z"
+  },
+  {
+    "id": "01890020-0000-7000-8000-000000000006",
+    "kind": "perenual",
+    "title": "Perenual plant care API",
+    "url": "https://perenual.com/docs/api",
+    "license": "Perenual terms",
+    "retrieved_at": "2026-09-15T12:00:00Z"
+  }
+]

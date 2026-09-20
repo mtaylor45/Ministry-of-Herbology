@@ -1,0 +1,19 @@
+# Workstream ownership. A (Architect) reviews and merges everything.
+*                           @mtaylor45
+
+/contracts/                 @mtaylor45
+/docs/adr/                  @mtaylor45
+/infra/                     @mtaylor45
+/.github/                   @mtaylor45
+/api/inventory/             @mtaylor45
+/api/tending/               @mtaylor45
+/api/almanac/               @mtaylor45
+/api/grounds/               @mtaylor45
+/workers/botany/            @mtaylor45
+/workers/weather/           @mtaylor45
+/workers/hub/               @mtaylor45
+/workers/plates/            @mtaylor45
+/web/src/lib/ui/            @mtaylor45
+/web/src/routes/            @mtaylor45
+/tests/                     @mtaylor45
+/fixtures/                  @mtaylor45

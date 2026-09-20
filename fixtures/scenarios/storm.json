@@ -1,0 +1,121 @@
+{
+  "name": "storm",
+  "site_id": "01890000-0000-7000-8000-000000000001",
+  "start": "2026-07-01",
+  "days": [
+    {
+      "date": "2026-07-01",
+      "tmin_c": 18.0,
+      "tmax_c": 30.0,
+      "precip_mm": 0.0,
+      "et0_mm": 5.0,
+      "condition": "clear"
+    },
+    {
+      "date": "2026-07-02",
+      "tmin_c": 18.0,
+      "tmax_c": 30.0,
+      "precip_mm": 0.0,
+      "et0_mm": 5.0,
+      "condition": "clear"
+    },
+    {
+      "date": "2026-07-03",
+      "tmin_c": 18.0,
+      "tmax_c": 30.0,
+      "precip_mm": 0.0,
+      "et0_mm": 5.0,
+      "condition": "clear"
+    },
+    {
+      "date": "2026-07-04",
+      "tmin_c": 18.0,
+      "tmax_c": 30.0,
+      "precip_mm": 0.0,
+      "et0_mm": 5.0,
+      "condition": "clear"
+    },
+    {
+      "date": "2026-07-05",
+      "tmin_c": 18.0,
+      "tmax_c": 30.0,
+      "precip_mm": 0.0,
+      "et0_mm": 5.0,
+      "condition": "clear"
+    },
+    {
+      "date": "2026-07-06",
+      "tmin_c": 18.0,
+      "tmax_c": 30.0,
+      "precip_mm": 0.0,
+      "et0_mm": 5.0,
+      "condition": "clear"
+    },
+    {
+      "date": "2026-07-07",
+      "tmin_c": 16.0,
+      "tmax_c": 22.0,
+      "precip_mm": 38.0,
+      "et0_mm": 1.2,
+      "condition": "rain"
+    },
+    {
+      "date": "2026-07-08",
+      "tmin_c": 16.0,
+      "tmax_c": 25.0,
+      "precip_mm": 0.0,
+      "et0_mm": 3.4,
+      "condition": "cloudy"
+    },
+    {
+      "date": "2026-07-09",
+      "tmin_c": 16.0,
+      "tmax_c": 25.0,
+      "precip_mm": 0.0,
+      "et0_mm": 3.4,
+      "condition": "cloudy"
+    },
+    {
+      "date": "2026-07-10",
+      "tmin_c": 16.0,
+      "tmax_c": 25.0,
+      "precip_mm": 0.0,
+      "et0_mm": 3.4,
+      "condition": "cloudy"
+    }
+  ],
+  "advisories": [],
+  "expect": {
+    "description": "A dry spell broken by 38 mm of rain on day 7. Outdoor, uncovered specimens show 'satisfied by rain' rather than having their task vanish. Covered and indoor ones do not.",
+    "assertions": [
+      {
+        "specimen": "01890040-0000-7000-8000-000000000004",
+        "on_day": 6,
+        "water_task_status": "satisfied",
+        "satisfied_by": "rain",
+        "note": "Back Terrace is uncovered"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000007",
+        "on_day": 6,
+        "water_task_status": "satisfied",
+        "satisfied_by": "rain"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000005",
+        "on_day": 6,
+        "water_task_status": "due",
+        "note": "Covered Porch: f_cover = 0, rain never reaches it"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000001",
+        "on_day": 6,
+        "water_task_status": "due",
+        "note": "indoor, interval rule, unaffected by weather"
+      },
+      {
+        "calendar_behaviour": "satisfied tasks are removed from the ICS feed by UID, not duplicated"
+      }
+    ]
+  }
+}

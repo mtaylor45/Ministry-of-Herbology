@@ -1,0 +1,12 @@
+{
+  "name": "The Ministry of Herbology",
+  "short_name": "Herbology",
+  "description": "Inventory and tend your indoor and outdoor plants.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4ecd8",
+  "theme_color": "#2f4a36",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
