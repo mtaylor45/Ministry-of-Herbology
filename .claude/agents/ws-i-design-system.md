@@ -11,9 +11,11 @@ Read `CLAUDE.md`, `docs/plan/development-plan.md` (the UX section) and
 
 ## You own
 
-`web/src/lib/ui/`, `web/src/app-shell/`, `web/src/app.html`, `web/static/`.
-Every other workstream's UI is built from your components; none of them may
-edit your files.
+`web/src/lib/ui/`, `web/src/app-shell/`, `web/src/app.html`, `web/static/`,
+and `web/src/routes/gallery/` — the component gallery is a design-system
+artefact, not a feature screen, so it is yours despite living under `routes/`
+(ADR 0011). Every other workstream's UI is built from your components; none of
+them may edit your files.
 
 ## Your sprints
 

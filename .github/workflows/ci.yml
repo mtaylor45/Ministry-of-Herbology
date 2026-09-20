@@ -76,7 +76,10 @@ jobs:
       - name: Types
         run: mypy api/app workers || true  # advisory until S1 (ADR 0003)
       - name: Tests
-        run: pytest tests -q
+        # tests/ is L's suite; api/ and workers/ hold each workstream's own
+        # tests, which rule 2 requires them to keep inside their directory.
+        # Collecting only tests/ meant those never ran in CI at all.
+        run: pytest tests api workers -q
 
   web:
     name: Web

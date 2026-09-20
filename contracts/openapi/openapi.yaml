@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: The Ministry of Herbology API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Contract for the Ministry of Herbology. Frozen in S0 — only Workstream A
     changes this file, via an ADR. Every path declares the workstream that
@@ -1026,6 +1026,9 @@ components:
       properties:
         accepted_name: { type: string }
         common_name:   { type: [string, 'null'] }
+        # POWO and GBIF index species, not cultivars, so the cultivar is split
+        # off the typed name during resolution and handed back here (ADR 0012).
+        cultivar:      { type: [string, 'null'] }
         family:        { type: [string, 'null'] }
         rank:          { type: string }
         gbif_key:      { type: [string, 'null'] }

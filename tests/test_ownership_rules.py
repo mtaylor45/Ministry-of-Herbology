@@ -95,3 +95,20 @@ def test_every_agent_declares_a_name_and_description(repo_root):
             f"name: {path.stem}" in head
         ), f"{path.name} frontmatter name must match its filename"
         assert "description:" in head
+
+
+def test_the_progress_marker_is_writable_by_every_workstream():
+    """Rule 6 tells the implementing workstream to strike its own entry from
+    NOT_YET_IMPLEMENTED, and that list lives in L's directory. Making it
+    L-only was a contradiction every sprint would hit (ADR 0011)."""
+    for workstream in "CDEFGHIJK":
+        assert not violations(
+            workstream, ["tests/contract/test_api_matches_spec.py"]
+        ), f"{workstream} must be able to strike its own exemption"
+
+
+def test_the_gallery_belongs_to_the_design_system():
+    assert not violations("I", ["web/src/routes/gallery/+page.svelte"])
+    assert violations(
+        "I", ["web/src/routes/register/+page.svelte"]
+    ), "I still may not write J's feature screens"
