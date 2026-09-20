@@ -17,17 +17,20 @@ export const THEME_STORAGE_KEY = 'moh-theme';
 /** Kept equal to `--moh-surface` in tokens.css; contrast.test.ts asserts it. */
 export const THEME_COLORS: Record<ThemeName, string> = {
   parchment: '#f4ecd8',
-  greenhouse: '#141a15'
+  greenhouse: '#141a15',
 };
 
 export const THEME_OPTIONS: (Paired & { choice: ThemeChoice })[] = [
   { choice: 'parchment', themed: 'Parchment', plain: 'Light' },
   { choice: 'greenhouse', themed: 'Night greenhouse', plain: 'Dark' },
-  { choice: 'system', themed: 'As the day decides', plain: 'Match my device' }
+  { choice: 'system', themed: 'As the day decides', plain: 'Match my device' },
 ];
 
 export function isThemeChoice(value: unknown): value is ThemeChoice {
-  return value === 'system' || (typeof value === 'string' && (THEMES as readonly string[]).includes(value));
+  return (
+    value === 'system' ||
+    (typeof value === 'string' && (THEMES as readonly string[]).includes(value))
+  );
 }
 
 /** The theme a choice actually resolves to right now. */
@@ -77,6 +80,6 @@ export function applyThemeToDocument(choice: ThemeChoice): ThemeName | null {
     storage: typeof localStorage === 'undefined' ? null : localStorage,
     prefersDark:
       typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches,
-    meta: document.querySelector('meta[name="theme-color"]')
+    meta: document.querySelector('meta[name="theme-color"]'),
   });
 }

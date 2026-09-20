@@ -18,7 +18,7 @@
     selected = false,
     disabled = false,
     leading,
-    trailing
+    trailing,
   }: {
     themed?: string;
     plain: string;

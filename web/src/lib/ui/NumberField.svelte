@@ -16,7 +16,7 @@
     required = false,
     disabled = false,
     name,
-    oninput
+    oninput,
   }: {
     value?: number | null;
     themed?: string;

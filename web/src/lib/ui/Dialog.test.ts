@@ -4,13 +4,15 @@
 import { describe, expect, it } from 'vitest';
 import Dialog from './Dialog.svelte';
 import { focusTrap, focusable, resolveTrapTarget } from './focusTrap';
-import { attrs, html, text } from './render';
+import { html, text } from './render';
 
 const body = () => {};
 
 describe('Dialog', () => {
   it('renders nothing at all when it is closed', () => {
-    expect(text(html(Dialog, { plain: 'Remove this plant', open: false, children: body }))).toBe('');
+    expect(text(html(Dialog, { plain: 'Remove this plant', open: false, children: body }))).toBe(
+      '',
+    );
   });
 
   it('is a modal dialog named by its own title', () => {
@@ -18,16 +20,14 @@ describe('Dialog', () => {
       themed: 'Uproot this specimen?',
       plain: 'Remove this plant',
       open: true,
-      children: body
+      children: body,
     });
-    const dialog = attrs(markup, 'div[^>]*role="dialog"'.replace(/\[.*/, 'div'));
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('aria-modal="true"');
     const labelledBy = /aria-labelledby="([^"]+)"/.exec(markup)?.[1];
     expect(labelledBy).toBeTruthy();
     expect(markup).toContain(`id="${labelledBy}"`);
     expect(text(markup)).toContain('Remove this plant');
-    expect(dialog).toBeTruthy();
   });
 
   it('describes itself when given a description, and points at it', () => {
@@ -35,7 +35,7 @@ describe('Dialog', () => {
       plain: 'Remove this plant',
       description: 'Its logs and photos go with it.',
       open: true,
-      children: body
+      children: body,
     });
     const describedBy = /aria-describedby="([^"]+)"/.exec(markup)?.[1];
     expect(markup).toContain(`id="${describedBy}"`);
@@ -51,16 +51,16 @@ describe('Dialog', () => {
       plain: 'Remove this plant',
       open: true,
       dismissible: false,
-      children: body
+      children: body,
     });
     expect(text(markup)).not.toContain('Close');
     expect(markup).toContain('data-dismissible="false"');
   });
 
   it('refuses a themed title with no plain one', () => {
-    expect(() => html(Dialog, { themed: 'Uproot this specimen?', open: true, children: body })).toThrow(
-      /Dialog/
-    );
+    expect(() =>
+      html(Dialog, { themed: 'Uproot this specimen?', open: true, children: body }),
+    ).toThrow(/Dialog/);
   });
 });
 
@@ -73,7 +73,7 @@ function stub(name: string, extra: Record<string, unknown> = {}) {
     focus() {
       this.focused += 1;
     },
-    ...extra
+    ...extra,
   };
 }
 

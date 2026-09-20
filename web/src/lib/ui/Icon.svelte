@@ -7,7 +7,7 @@
     name,
     size = 20,
     title,
-    strokeWidth = 1.6
+    strokeWidth = 1.6,
   }: { name: IconName; size?: number | string; title?: string; strokeWidth?: number } = $props();
 
   const spec = $derived.by(() => {

@@ -15,7 +15,7 @@
     hint,
     error,
     required = false,
-    children
+    children,
   }: {
     id: string;
     themed?: string;

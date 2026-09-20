@@ -45,7 +45,7 @@ export {
   selectionSummary,
   toggleAll,
   toggleOne,
-  type CheckState
+  type CheckState,
 } from './selection';
 export { formatAsOf, staleSentence, type Timestamp } from './stale';
 export { STATUS, type Status, type StatusKey } from './status';
@@ -60,6 +60,6 @@ export {
   readThemeChoice,
   resolveTheme,
   type ThemeChoice,
-  type ThemeName
+  type ThemeName,
 } from './theme';
 export type { SelectOption } from './types';

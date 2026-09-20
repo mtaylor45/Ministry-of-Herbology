@@ -75,8 +75,8 @@ describe('SelectField', () => {
       plain: 'Location',
       options: [
         { value: 'sill', themed: 'The kitchen sill', plain: 'Kitchen sill' },
-        { value: 'bed', plain: 'South bed' }
-      ]
+        { value: 'bed', plain: 'South bed' },
+      ],
     });
     expect(text(markup)).toContain('Kitchen sill (The kitchen sill)');
     expect(text(markup)).toContain('South bed');

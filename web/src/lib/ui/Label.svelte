@@ -7,7 +7,7 @@
     themed,
     plain,
     display = 'beside',
-    where = 'Label'
+    where = 'Label',
   }: {
     themed?: string;
     plain?: string;

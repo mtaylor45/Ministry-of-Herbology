@@ -20,7 +20,7 @@
     name,
     value,
     donePlain = 'Done',
-    onchange
+    onchange,
   }: {
     checked?: boolean;
     /** Overrides `checked`; `mixed` is the batch select-all state. */

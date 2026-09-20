@@ -41,7 +41,7 @@ describe('hasThemed', () => {
 describe('Label', () => {
   it('renders both halves', () => {
     expect(text(html(Label, { themed: 'Parched', plain: 'Water today' }))).toBe(
-      'Parched Water today'
+      'Parched Water today',
     );
   });
 
@@ -49,7 +49,7 @@ describe('Label', () => {
     const markup = html(Label, {
       themed: 'Parched',
       plain: 'Water today',
-      display: 'screen-reader'
+      display: 'screen-reader',
     });
     expect(markup).toContain('visually-hidden');
     expect(text(markup)).toContain('Water today');

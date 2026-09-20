@@ -16,9 +16,24 @@ export interface SampleTask {
 }
 
 export const SAMPLE_TASKS: SampleTask[] = [
-  { id: 'task-1', themed: 'The basil thirsts', plain: 'Water the basil', meta: 'Kitchen sill — due today' },
-  { id: 'task-2', themed: 'Turn the fern about', plain: 'Rotate the fern', meta: 'Hallway — due today' },
-  { id: 'task-3', themed: 'Feed the tomatoes', plain: 'Fertilise the tomatoes', meta: 'South bed — due tomorrow' }
+  {
+    id: 'task-1',
+    themed: 'The basil thirsts',
+    plain: 'Water the basil',
+    meta: 'Kitchen sill — due today',
+  },
+  {
+    id: 'task-2',
+    themed: 'Turn the fern about',
+    plain: 'Rotate the fern',
+    meta: 'Hallway — due today',
+  },
+  {
+    id: 'task-3',
+    themed: 'Feed the tomatoes',
+    plain: 'Fertilise the tomatoes',
+    meta: 'South bed — due tomorrow',
+  },
 ];
 
 export interface SampleSpecimen {
@@ -30,14 +45,32 @@ export interface SampleSpecimen {
 }
 
 export const SAMPLE_SPECIMENS: SampleSpecimen[] = [
-  { id: 'spec-1', themed: 'Sweet basil', plain: 'Ocimum basilicum', meta: 'Kitchen sill · indoors', icon: 'leaf' },
-  { id: 'spec-2', themed: 'Lady fern', plain: 'Athyrium filix-femina', meta: 'Hallway · indoors', icon: 'seedling' },
-  { id: 'spec-3', themed: 'Garden tomato', plain: 'Solanum lycopersicum', meta: 'South bed · outdoors', icon: 'pin' }
+  {
+    id: 'spec-1',
+    themed: 'Sweet basil',
+    plain: 'Ocimum basilicum',
+    meta: 'Kitchen sill · indoors',
+    icon: 'leaf',
+  },
+  {
+    id: 'spec-2',
+    themed: 'Lady fern',
+    plain: 'Athyrium filix-femina',
+    meta: 'Hallway · indoors',
+    icon: 'seedling',
+  },
+  {
+    id: 'spec-3',
+    themed: 'Garden tomato',
+    plain: 'Solanum lycopersicum',
+    meta: 'South bed · outdoors',
+    icon: 'pin',
+  },
 ];
 
 export const SAMPLE_LOCATIONS: SelectOption[] = [
   { value: 'kitchen-sill', themed: 'The kitchen sill', plain: 'Kitchen sill' },
   { value: 'greenhouse-bench', themed: 'The greenhouse bench', plain: 'Greenhouse bench' },
   { value: 'south-bed', themed: 'The south bed', plain: 'South bed' },
-  { value: 'cold-frame', plain: 'Cold frame', disabled: true }
+  { value: 'cold-frame', plain: 'Cold frame', disabled: true },
 ];

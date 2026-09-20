@@ -12,7 +12,7 @@
     tone = 'plain',
     action,
     children,
-    footer
+    footer,
   }: {
     themed?: string;
     plain?: string;

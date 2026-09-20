@@ -31,7 +31,10 @@ describe('TaskCheckbox', () => {
   });
 
   it('describes the row with its plain meta line rather than a bare tick', () => {
-    const markup = html(TaskCheckbox, { plain: 'Water the basil', meta: 'Kitchen sill — due today' });
+    const markup = html(TaskCheckbox, {
+      plain: 'Water the basil',
+      meta: 'Kitchen sill — due today',
+    });
     const described = attrs(markup, 'input')['aria-describedby'];
     expect(described).toBeTruthy();
     expect(markup).toContain(`id="${described}"`);

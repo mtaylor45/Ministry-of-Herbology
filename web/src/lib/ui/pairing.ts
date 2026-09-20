@@ -25,14 +25,18 @@ export type PlainDisplay = 'beside' | 'below' | 'screen-reader';
  * @param where the component name, so the error names the offender
  * @returns the plain string, trimmed
  */
-export function requirePair(themed: string | undefined, plain: string | undefined, where: string): string {
+export function requirePair(
+  themed: string | undefined,
+  plain: string | undefined,
+  where: string,
+): string {
   const cleanPlain = plain?.trim() ?? '';
   const cleanThemed = themed?.trim() ?? '';
   if (cleanPlain) return cleanPlain;
   if (cleanThemed) {
     throw new Error(
       `${where}: "${cleanThemed}" is a themed string with no plain one. ` +
-        'Every themed string is paired with a plain one (ADR 0005).'
+        'Every themed string is paired with a plain one (ADR 0005).',
     );
   }
   throw new Error(`${where}: a plain-language label is required.`);

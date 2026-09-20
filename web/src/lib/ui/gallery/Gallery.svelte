@@ -16,8 +16,8 @@
   <h1>Component gallery <span class="plain">The design system, both themes</span></h1>
   <p>
     Every control Workstream I ships, rendered twice: once on parchment, once in the night
-    greenhouse. No API, no fixtures, no login. Themed wording always travels with its plain
-    meaning, touch targets are at least 44px, and nothing here says anything with colour alone.
+    greenhouse. No API, no fixtures, no login. Themed wording always travels with its plain meaning,
+    touch targets are at least 44px, and nothing here says anything with colour alone.
   </p>
 </header>
 

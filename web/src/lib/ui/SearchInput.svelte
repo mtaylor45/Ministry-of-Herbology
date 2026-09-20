@@ -14,7 +14,7 @@
     name = 'q',
     clearPlain = 'Clear the search',
     oninput,
-    onsubmit
+    onsubmit,
   }: {
     value?: string;
     themed?: string;

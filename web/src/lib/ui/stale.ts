@@ -26,7 +26,7 @@ export function formatAsOf(asOf: Timestamp, now: Date = new Date()): string {
   const units: [number, string][] = [
     [60, 'minute'],
     [60, 'hour'],
-    [24, 'day']
+    [24, 'day'],
   ];
   let value = seconds;
   let unit = 'second';

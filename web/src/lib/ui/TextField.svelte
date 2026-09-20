@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { HTMLInputAttributes } from 'svelte/elements';
   import Field from './Field.svelte';
 
   /** Single-line text, or a multi-line note when `rows` is given. */
@@ -16,7 +17,7 @@
     autocomplete,
     rows,
     maxlength,
-    oninput
+    oninput,
   }: {
     value?: string;
     themed?: string;
@@ -28,7 +29,7 @@
     readonly?: boolean;
     placeholder?: string;
     name?: string;
-    autocomplete?: string;
+    autocomplete?: HTMLInputAttributes['autocomplete'];
     /** Given, the field becomes a textarea of this many rows. */
     rows?: number;
     maxlength?: number;

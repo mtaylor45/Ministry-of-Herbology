@@ -15,7 +15,7 @@
     required = false,
     disabled = false,
     name,
-    onchange
+    onchange,
   }: {
     value?: string;
     options: SelectOption[];

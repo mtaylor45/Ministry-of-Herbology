@@ -12,7 +12,7 @@
     disabled = false,
     onPlain = 'On',
     offPlain = 'Off',
-    onchange
+    onchange,
   }: {
     checked?: boolean;
     themed?: string;

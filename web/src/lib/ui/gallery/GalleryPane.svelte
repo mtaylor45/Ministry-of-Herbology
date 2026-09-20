@@ -24,14 +24,14 @@
   let { theme }: { theme: string } = $props();
 
   let nickname = $state('Sunday');
-  let potSize = $state<number | null>(180);
+  let potSize: number | null = $state(180);
   let location = $state('greenhouse-bench');
   let query = $state('');
   let notify = $state(true);
   let dialogOpen = $state(false);
-  let selected = $state(new Set<string>([SAMPLE_TASKS[0].id]));
+  let selected: Set<string> = $state(new Set([SAMPLE_TASKS[0].id]));
 
-  const state = $derived(selectionState(selected.size, SAMPLE_TASKS.length));
+  const selectAll = $derived(selectionState(selected.size, SAMPLE_TASKS.length));
 </script>
 
 <h3 class="pane-title">{theme}</h3>
@@ -68,9 +68,13 @@
     <TaskCheckbox
       plain="Select all"
       themed="The whole round"
-      checkState={state}
+      checkState={selectAll}
       meta={selectionSummary(selected.size, SAMPLE_TASKS.length)}
-      onchange={() => (selected = toggleAll(SAMPLE_TASKS.map((task) => task.id), state))}
+      onchange={() =>
+        (selected = toggleAll(
+          SAMPLE_TASKS.map((task) => task.id),
+          selectAll,
+        ))}
     />
     <hr />
     {#each SAMPLE_TASKS as task (task.id)}
@@ -102,7 +106,13 @@
         />
       {/each}
       <ListRow plain="Selected row" meta="Tapped for a batch action" icon="leaf" selected />
-      <ListRow plain="Unavailable row" meta="Nothing to open yet" icon="leaf" disabled onclick={() => {}} />
+      <ListRow
+        plain="Unavailable row"
+        meta="Nothing to open yet"
+        icon="leaf"
+        disabled
+        onclick={() => {}}
+      />
     </div>
   </Card>
 </section>
@@ -110,13 +120,37 @@
 <section aria-labelledby="{theme}-fields" class="group">
   <h4 id="{theme}-fields">Fields</h4>
   <div class="stack">
-    <SearchInput bind:value={query} themed="Consult the Register" plain="Search specimens" placeholder="Basil, north bed, toxic…" />
-    <TextField bind:value={nickname} themed="What you call it" plain="Nickname" hint="Only you see this." />
+    <SearchInput
+      bind:value={query}
+      themed="Consult the Register"
+      plain="Search specimens"
+      placeholder="Basil, north bed, toxic…"
+    />
+    <TextField
+      bind:value={nickname}
+      themed="What you call it"
+      plain="Nickname"
+      hint="Only you see this."
+    />
     <NumberField bind:value={potSize} plain="Pot diameter" suffix="mm" min={0} step={10} />
-    <SelectField bind:value={location} themed="Where it stands" plain="Location" options={SAMPLE_LOCATIONS} />
+    <SelectField
+      bind:value={location}
+      themed="Where it stands"
+      plain="Location"
+      options={SAMPLE_LOCATIONS}
+    />
     <TextField plain="Field note" rows={2} placeholder="Leaf tips browning on the south side…" />
-    <TextField plain="Species" error="No match in the accepted names. Try the botanical name." required />
-    <Toggle bind:checked={notify} themed="Send word by owl" plain="Notify me about this plant" hint="Uses your hub notifications." />
+    <TextField
+      plain="Species"
+      error="No match in the accepted names. Try the botanical name."
+      required
+    />
+    <Toggle
+      bind:checked={notify}
+      themed="Send word by owl"
+      plain="Notify me about this plant"
+      hint="Uses your hub notifications."
+    />
   </div>
 </section>
 

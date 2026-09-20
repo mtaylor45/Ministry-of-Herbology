@@ -13,7 +13,7 @@ export const FOCUSABLE_SELECTOR = [
   'input:not([disabled]):not([type="hidden"])',
   'select:not([disabled])',
   'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])'
+  '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 
 /** The shape `resolveTrapTarget` needs. Real elements satisfy it; so do stubs. */
@@ -49,7 +49,7 @@ export interface TrapKey {
 export function resolveTrapTarget<T extends FocusCandidate>(
   event: TrapKey,
   candidates: readonly T[],
-  active: T | null | undefined
+  active: T | null | undefined,
 ): T | null {
   if (event.key !== 'Tab') return null;
   const items = focusable(candidates);
@@ -107,6 +107,6 @@ export function focusTrap(node: HTMLElement, options: FocusTrapOptions = {}) {
     destroy() {
       node.removeEventListener('keydown', onkeydown);
       if (previous instanceof HTMLElement) previous.focus();
-    }
+    },
   };
 }

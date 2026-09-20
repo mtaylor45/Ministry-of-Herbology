@@ -23,6 +23,6 @@ export function buttonAttrs(variant: ButtonVariant, state: ButtonState) {
     // focus is not thrown to the top of the page mid-task.
     disabled: disabled && !loading ? true : undefined,
     'aria-disabled': loading ? ('true' as const) : undefined,
-    'aria-busy': loading ? ('true' as const) : undefined
+    'aria-busy': loading ? ('true' as const) : undefined,
   };
 }

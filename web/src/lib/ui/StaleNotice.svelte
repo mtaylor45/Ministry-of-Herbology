@@ -16,7 +16,7 @@
     reason,
     now = new Date(),
     retryPlain = 'Try again',
-    onretry
+    onretry,
   }: {
     themed?: string;
     /** The plain name of the data: "The Almanac forecast". */

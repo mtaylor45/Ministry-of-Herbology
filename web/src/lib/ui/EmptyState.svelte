@@ -11,7 +11,7 @@
     themed,
     plain,
     body,
-    action
+    action,
   }: {
     icon?: IconName;
     themed?: string;

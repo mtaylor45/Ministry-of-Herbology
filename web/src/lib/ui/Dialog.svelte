@@ -19,7 +19,7 @@
     closePlain = 'Close',
     onclose,
     children,
-    footer
+    footer,
   }: {
     open?: boolean;
     themed?: string;

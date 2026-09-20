@@ -2,12 +2,7 @@
   import Icon from './Icon.svelte';
   import Label from './Label.svelte';
   import type { IconName } from './icons';
-  import {
-    THEME_OPTIONS,
-    applyThemeToDocument,
-    readThemeChoice,
-    type ThemeChoice
-  } from './theme';
+  import { THEME_OPTIONS, applyThemeToDocument, readThemeChoice, type ThemeChoice } from './theme';
 
   /** Parchment, night greenhouse, or whatever the device says. Writes
    *  `data-theme` on the document element and remembers the choice. */
@@ -15,7 +10,7 @@
     choice = $bindable<ThemeChoice>('system'),
     themed = 'The light in the greenhouse',
     plain = 'Theme',
-    onchange
+    onchange,
   }: {
     choice?: ThemeChoice;
     themed?: string;
@@ -27,7 +22,7 @@
   const GLYPHS: Record<ThemeChoice, IconName> = {
     parchment: 'sun',
     greenhouse: 'moon',
-    system: 'gear'
+    system: 'gear',
   };
 
   // Pick up what was stored last time, once, on the client.
@@ -58,7 +53,12 @@
         />
         <span class="face">
           <Icon name={GLYPHS[option.choice]} size={18} />
-          <Label themed={option.themed} plain={option.plain} display="below" where="ThemeSwitcher" />
+          <Label
+            themed={option.themed}
+            plain={option.plain}
+            display="below"
+            where="ThemeSwitcher"
+          />
         </span>
       </label>
     {/each}

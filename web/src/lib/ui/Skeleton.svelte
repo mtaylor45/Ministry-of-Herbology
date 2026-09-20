@@ -6,7 +6,7 @@
     width = '100%',
     height = '1rem',
     plain = 'Loading…',
-    rounded = false
+    rounded = false,
   }: {
     lines?: number;
     width?: string;
