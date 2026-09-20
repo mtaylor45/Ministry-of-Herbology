@@ -72,8 +72,7 @@ async function get<T>(path: string, fetcher: typeof fetch = fetch): Promise<T> {
 
 export const api = {
   morningRounds: (f?: typeof fetch) => get<MorningRounds>('/tending/rounds', f),
-  specimens: (f?: typeof fetch) =>
-    get<{ items: Specimen[]; total: number }>('/specimens', f),
+  specimens: (f?: typeof fetch) => get<{ items: Specimen[]; total: number }>('/specimens', f),
   specimen: (id: string, f?: typeof fetch) => get<Specimen>(`/specimens/${id}`, f),
-  frostAlerts: (f?: typeof fetch) => get<FrostAlert[]>('/almanac/frost', f)
+  frostAlerts: (f?: typeof fetch) => get<FrostAlert[]>('/almanac/frost', f),
 };
