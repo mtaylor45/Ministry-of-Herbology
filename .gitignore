@@ -22,3 +22,4 @@ uploads/
 # Editors and OS
 .DS_Store
 *.swp
+*.egg-info/

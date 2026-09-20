@@ -45,7 +45,7 @@ const GREENHOUSE = tokens(":root[data-theme='greenhouse']");
 
 const THEMES: [string, Record<string, string>][] = [
   ['parchment', PARCHMENT],
-  ['greenhouse', GREENHOUSE]
+  ['greenhouse', GREENHOUSE],
 ];
 
 /** Body text: AA is 4.5:1. */
@@ -60,7 +60,7 @@ const BODY_PAIRS: [string, string][] = [
   ['--moh-sated', '--moh-surface-raised'],
   ['--moh-frost', '--moh-surface-raised'],
   ['--moh-thriving', '--moh-surface-raised'],
-  ['--moh-ailing', '--moh-surface-raised']
+  ['--moh-ailing', '--moh-surface-raised'],
 ];
 
 /** Non-text: borders and focus rings need 3:1 against what they sit on. */
@@ -68,7 +68,7 @@ const NON_TEXT_PAIRS: [string, string][] = [
   ['--moh-border', '--moh-surface'],
   ['--moh-border', '--moh-surface-raised'],
   ['--moh-accent', '--moh-surface'],
-  ['--moh-accent', '--moh-surface-raised']
+  ['--moh-accent', '--moh-surface-raised'],
 ];
 
 describe.each(THEMES)('%s theme', (name, theme) => {
@@ -84,9 +84,15 @@ describe.each(THEMES)('%s theme', (name, theme) => {
 
   it('defines every token the light theme defines', () => {
     const missing = Object.keys(PARCHMENT).filter(
-      (key) => !(key in theme) && key.startsWith('--moh-') && !key.includes('font') &&
-        !key.includes('space') && !key.includes('text') && !key.includes('radius') &&
-        !key.includes('shadow') && key !== '--moh-tap'
+      (key) =>
+        !(key in theme) &&
+        key.startsWith('--moh-') &&
+        !key.includes('font') &&
+        !key.includes('space') &&
+        !key.includes('text') &&
+        !key.includes('radius') &&
+        !key.includes('shadow') &&
+        key !== '--moh-tap',
     );
     expect(missing).toEqual([]);
   });

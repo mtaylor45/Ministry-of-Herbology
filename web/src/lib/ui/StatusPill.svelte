@@ -25,12 +25,26 @@
     font-size: var(--moh-text-sm);
     line-height: 1.4;
   }
-  .pill[data-tone='parched'] { color: var(--moh-parched); }
-  .pill[data-tone='sated'] { color: var(--moh-sated); }
-  .pill[data-tone='frost'] { color: var(--moh-frost); }
-  .pill[data-tone='thriving'] { color: var(--moh-thriving); }
-  .pill[data-tone='ailing'] { color: var(--moh-ailing); }
+  .pill[data-tone='parched'] {
+    color: var(--moh-parched);
+  }
+  .pill[data-tone='sated'] {
+    color: var(--moh-sated);
+  }
+  .pill[data-tone='frost'] {
+    color: var(--moh-frost);
+  }
+  .pill[data-tone='thriving'] {
+    color: var(--moh-thriving);
+  }
+  .pill[data-tone='ailing'] {
+    color: var(--moh-ailing);
+  }
 
-  .themed { font-family: var(--moh-font-display); }
-  .plain { color: var(--moh-ink-muted); }
+  .themed {
+    font-family: var(--moh-font-display);
+  }
+  .plain {
+    color: var(--moh-ink-muted);
+  }
 </style>
