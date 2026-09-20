@@ -25,6 +25,53 @@ POST /api/v1/taxon/resolve  {"name": "Sansevieria trifasciata"}
              "url": "…", "license": "CC BY 4.0", "retrieved_at": "…"}}]
 ```
 
+## S2 — enrichment
+
+A resolved species in, a cited care profile out: Compendium prose, common
+names, the care columns, and toxicity. Every published value carries a
+`care_value` row naming its source and its confidence; every value without a
+source is published as `confidence: unknown` with no value at all.
+
+```
+enrich_species(ctx, species_id, "Abies balsamea")
+
+{"enrichment_state": "complete",
+ "columns": {"min_temp_c": -41.7, "soil_ph_min": 4.0, "light_label": "full_sun", …},
+ "care_values": [{"field": "min_temp_c", "value": -41.7, "unit": "C",
+                  "confidence": "high", "is_user_override": false,
+                  "note": "USDA 'Temperature, Minimum (°F)' = -43°F, converted to °C.",
+                  "source": {"kind": "usda", "url": "…", "license": "Public domain", …}},
+                 {"field": "water_k_c", "value": null, "confidence": "unknown",
+                  "source": null}, …],
+ "sources": [{"kind": "usda", "payload": {…}, …}]}
+```
+
+### What each source actually gives us
+
+| Source | Gives | Does not give |
+| --- | --- | --- |
+| USDA PLANTS | `min_temp_c` (°F→°C), `soil_ph_min/max`, `light_label`, toxicity | hardiness zones — the API has none; and characteristics exist for very few plants |
+| Wikidata | common names (English), native range, GBIF and POWO ids | care values |
+| Wikipedia | the Compendium summary, quoted | anything numeric |
+| Perenual | light, toxicity, description — **only with a key** | anything, by default (ADR 0007) |
+
+**The honest headline: for all eight fixture species USDA returns no measured
+characteristics at all.** So `water_k_c`, `min_temp_c`, `water_interval_days`
+and `light_label` come back `unknown` for them. That is the ADR 0007 coverage
+gap, and under ADR 0010 — no soil probe, the water balance alone deciding when
+to water — it is exactly the gap that must stay visible. The user edits it; the
+engines keep their own documented fallbacks; this worker publishes no number
+nobody gave it.
+
+### Toxicity
+
+One documented exception to plain source precedence: **a source claiming
+toxicity outranks a source denying it**, whatever the table says, and the
+citation then points at the source that made the claim. Under-reporting is the
+dangerous direction for a safety flag. The confidence drops one step to record
+that the sources disagreed. USDA's single rating does not separate pets from
+children, so it sets both flags and the note says so.
+
 ## How it fits together
 
 | Module | Does |
@@ -36,6 +83,13 @@ POST /api/v1/taxon/resolve  {"name": "Sansevieria trifasciata"}
 | `connectors/gbif.py` | GBIF — fuzzy matching and vernacular names. |
 | `resolve.py` | Ranks and merges what the sources said, and decides how much to trust it. |
 | `sources.py` | `source` rows: citation plus the raw payload, kept so a synthesis can be redone. |
+| `connectors/wikipedia.py` | The Compendium summary, quoted. Prose only. |
+| `connectors/wikidata.py` | Common names, native range, and the ids that let Kew check the encyclopaedia. |
+| `connectors/usda.py` | Minimum temperature, soil pH, light, toxicity — where USDA has measured them. |
+| `connectors/perenual.py` | Written, never constructed without a key (ADR 0007). |
+| `enricher.py` | Asks every source about one species; gathers, does not decide. |
+| `enrichment.py` | Cited care synthesis: the value, the citation and the confidence. |
+| `mocks/record.py` | Re-records every payload from the live services in one command. |
 | `tasks.py` | Source precedence, confidence arithmetic, the Arq jobs. |
 | `router.py` | `POST /taxon/resolve`, in the contract's shape. |
 | `mocks/` | Recorded payloads and the frozen fixtures, so everything above runs offline. |
@@ -93,7 +147,7 @@ confidence. See `mocks/recorded/PROVENANCE.md`.
 ## Running it
 
 ```
-.venv/bin/python -m pytest workers/botany -q     # 107 tests, no network
+.venv/bin/python -m pytest workers/botany -q     # 175 tests, no network
 .venv/bin/ruff check workers/botany
 .venv/bin/black --check workers/botany
 ```

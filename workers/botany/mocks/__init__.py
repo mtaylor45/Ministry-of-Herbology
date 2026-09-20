@@ -11,6 +11,14 @@ the live connectors use, so mock mode exercises the real code path rather than a
 parallel one. ``recorded/PROVENANCE.md`` says where each payload came from.
 """
 
-from .fetcher import RecordedFetcher, build_mock_connectors
+from .fetcher import (
+    RecordedFetcher,
+    build_mock_connectors,
+    build_mock_enrichment_connectors,
+)
 
-__all__ = ["RecordedFetcher", "build_mock_connectors"]
+__all__ = [
+    "RecordedFetcher",
+    "build_mock_connectors",
+    "build_mock_enrichment_connectors",
+]

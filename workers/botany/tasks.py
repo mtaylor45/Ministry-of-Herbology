@@ -99,8 +99,41 @@ async def resolve_taxon(ctx: dict, name: str) -> list[dict[str, Any]]:
     return resolution.to_list()
 
 
-async def enrich_species(ctx: dict, species_id: str) -> None:  # pragma: no cover - S2
-    raise NotImplementedError("S2 (D): Wikipedia, Wikidata, USDA, Perenual connectors")
+async def enrich_species(
+    ctx: dict, species_id: str, accepted_name: str = ""
+) -> dict[str, Any]:
+    """S2: fill a species' care profile from the free sources, every value cited.
+
+    Returns the species column updates, the ``care_value`` rows and the
+    ``source`` rows (payloads included) for the caller to persist — this worker
+    decides what is true and what it is worth, and does not own the database.
+
+    ``accepted_name`` is what S1 resolution settled on. Without it there is
+    nothing to look up, and enrichment says so rather than guessing from an id.
+    """
+    from .connectors.base import SpeciesRef
+    from .factory import get_enricher
+
+    if not accepted_name.strip():
+        return {
+            "species_id": species_id,
+            "enrichment_state": "failed",
+            "errors": {"input": "enrich_species needs the accepted name S1 resolved"},
+            "columns": {},
+            "care_values": [],
+            "sources": [],
+        }
+
+    enricher = ctx.get("enricher") or get_enricher()
+    enrichment = await enricher.enrich(SpeciesRef(accepted_name=accepted_name.strip()))
+    return {
+        "species_id": species_id,
+        "enrichment_state": enrichment.state,
+        "errors": enrichment.errors,
+        "columns": enrichment.columns,
+        "care_values": enrichment.to_care_value_dicts(),
+        "sources": [s.to_row() for s in enrichment.sources],
+    }
 
 
 class WorkerSettings:
