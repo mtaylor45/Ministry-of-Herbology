@@ -50,10 +50,25 @@
 {/if}
 
 <style>
-  .plain { color: var(--moh-ink-muted); font-family: var(--moh-font-body); font-size: var(--moh-text-sm); }
-  .greeting { font-style: italic; color: var(--moh-ink-muted); }
-  .error { color: var(--moh-ailing); }
-  .tasks { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--moh-space-3); }
+  .plain {
+    color: var(--moh-ink-muted);
+    font-family: var(--moh-font-body);
+    font-size: var(--moh-text-sm);
+  }
+  .greeting {
+    font-style: italic;
+    color: var(--moh-ink-muted);
+  }
+  .error {
+    color: var(--moh-ailing);
+  }
+  .tasks {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: var(--moh-space-3);
+  }
   .tasks li {
     display: flex;
     flex-wrap: wrap;
@@ -66,6 +81,14 @@
     border: 1px solid var(--moh-border);
     border-radius: var(--moh-radius);
   }
-  .tasks a { display: flex; flex-direction: column; text-decoration: none; color: inherit; }
-  .themed { font-family: var(--moh-font-display); font-size: var(--moh-text-lg); }
+  .tasks a {
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+  }
+  .themed {
+    font-family: var(--moh-font-display);
+    font-size: var(--moh-text-lg);
+  }
 </style>

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ministry-of-herbology-api"
 version = "1.0.0"
@@ -26,6 +30,11 @@ dev = [
     "mypy>=1.13",
     "openapi-spec-validator>=0.7",
 ]
+
+# One package per workstream, plus the shared app. Autodiscovery cannot guess
+# a flat layout with this many top-level packages, so they are listed.
+[tool.setuptools]
+packages = ["app", "almanac", "grounds", "inventory", "tending"]
 
 [tool.black]
 line-length = 100
