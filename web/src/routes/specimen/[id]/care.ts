@@ -20,6 +20,9 @@ export interface CareField {
   /** A sentence saying what the number is for, in the editor. */
   hint?: string;
   unit?: string;
+  /** The name as it reads mid-sentence, where lowercasing the plain name would
+   *  mangle it — "lowest soil pH", not "lowest soil ph". */
+  lower?: string;
   kind: 'number' | 'text' | 'boolean';
   /** Bounds for the editor, where the field has natural ones. */
   min?: number;
@@ -72,8 +75,22 @@ export const CARE_FIELDS: Record<string, CareField> = {
     step: 0.5,
   },
   light_label: { plain: 'Light', themed: 'Appetite for sun', kind: 'text' },
-  soil_ph_min: { plain: 'Lowest soil pH', kind: 'number', min: 3, max: 10, step: 0.1 },
-  soil_ph_max: { plain: 'Highest soil pH', kind: 'number', min: 3, max: 10, step: 0.1 },
+  soil_ph_min: {
+    plain: 'Lowest soil pH',
+    lower: 'lowest soil pH',
+    kind: 'number',
+    min: 3,
+    max: 10,
+    step: 0.1,
+  },
+  soil_ph_max: {
+    plain: 'Highest soil pH',
+    lower: 'highest soil pH',
+    kind: 'number',
+    min: 3,
+    max: 10,
+    step: 0.1,
+  },
   soil_type: { plain: 'Soil', kind: 'text' },
   humidity_min_pct: {
     plain: 'Lowest comfortable humidity',
@@ -100,6 +117,36 @@ export function humanise(field: string): string {
 
 export function careField(field: string): CareField {
   return CARE_FIELDS[field] ?? { plain: humanise(field), kind: 'text' };
+}
+
+/** The field's name as it reads inside a sentence, such as a button's label. */
+export function sentenceName(field: string): string {
+  const spec = careField(field);
+  return spec.lower ?? spec.plain.toLowerCase();
+}
+
+/** Units are stored SI and terse; a reader wants the symbol.
+ *
+ *  The contract leaves `CareValue.unit` a free string, and the fixtures write
+ *  temperatures as `C`. Showing "10 C" where the rest of the app says "10 °C"
+ *  is the kind of small inconsistency that makes a number look untrustworthy,
+ *  so the symbols are normalised on the way out. */
+const UNIT_SYMBOLS: Record<string, string> = {
+  c: '°C',
+  celsius: '°C',
+  degc: '°C',
+  f: '°F',
+  pct: '%',
+  percent: '%',
+  l: 'litres',
+  litre: 'litres',
+};
+
+export function displayUnit(unit: string | null | undefined): string | undefined {
+  if (!unit) return undefined;
+  const trimmed = unit.trim();
+  if (!trimmed) return undefined;
+  return UNIT_SYMBOLS[trimmed.toLowerCase()] ?? trimmed;
 }
 
 /** The order care values are read in: what waters it, what kills it, then the rest. */
@@ -148,7 +195,7 @@ export function formatValue(value: unknown, field: string, unit?: string | null)
   if (field === 'light_label' && typeof value === 'string') {
     return LIGHT_LABELS[value] ?? humanise(value);
   }
-  const suffix = unit ?? spec.unit;
+  const suffix = displayUnit(unit) ?? spec.unit;
   if (typeof value === 'number') {
     const shown = Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
     return suffix ? `${shown} ${suffix}` : shown;

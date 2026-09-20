@@ -13,9 +13,11 @@
   import {
     careField,
     confidenceStatus,
+    displayUnit,
     editTarget,
     formatValue,
     isUncited,
+    sentenceName,
     sortCareValues,
     sourceKind,
   } from './care';
@@ -146,7 +148,7 @@
       <div class="act">
         <Button
           variant="quiet"
-          plain="Correct {spec_.plain.toLowerCase()}"
+          plain="Correct {sentenceName(value.field)}"
           themed="Amend the record"
           icon="quill"
           onclick={() => startEdit(value)}
@@ -159,9 +161,7 @@
 <Dialog
   bind:open
   themed="Amend the record"
-  plain={editing
-    ? `Correct ${careField(editing.field).plain.toLowerCase()}`
-    : 'Correct a care value'}
+  plain={editing ? `Correct ${sentenceName(editing.field)}` : 'Correct a care value'}
   description={target?.scope}
   onclose={() => {
     editing = null;
@@ -175,7 +175,7 @@
         plain={spec.plain}
         themed={spec.themed}
         hint={spec.hint}
-        suffix={editing.unit ?? spec.unit}
+        suffix={displayUnit(editing.unit) ?? spec.unit}
         min={spec.min}
         max={spec.max}
         step={spec.step ?? 'any'}
