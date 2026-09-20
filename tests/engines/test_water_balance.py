@@ -194,3 +194,45 @@ def test_manual_watering_reduces_the_deficit(repo_root):
         capacity,
     )
     assert watered < deficit
+
+
+def test_the_engine_is_complete_with_no_sensors_at_all(repo_root, world):
+    """ADR 0010: there is no soil-moisture hardware, so model-only is the
+    shipping path — not a degraded one. Every outdoor specimen must reach a
+    definite watering answer from weather alone."""
+    species, locations, specimens = world
+    scenario = _fixture(repo_root, "scenarios/drought.json")
+
+    answered = 0
+    for specimen in specimens.values():
+        sp = species[specimen["species_id"]]
+        if not specimen["is_outdoor"] or sp.get("water_k_c") is None:
+            continue
+        _, deficit, capacity = run_scenario(
+            scenario, specimen, sp, locations[specimen["location_id"]]
+        )
+        assert isinstance(deficit, float) and deficit >= 0.0
+        assert is_watering_due(deficit, capacity) in (True, False)
+        answered += 1
+    assert answered >= 5, "the fixtures should exercise several outdoor profiles"
+
+
+def test_a_sensor_reading_overrides_the_model_when_one_exists(repo_root, world):
+    """The override seam ADR 0010 says to keep. No hardware drives it today,
+    so this is the only thing keeping it honest until one appears."""
+    _, _, specimens = world
+    specimen = specimens[LEMON_ON_TERRACE]
+    capacity = capacity_mm(specimen["in_container"], specimen["container_litres"])
+
+    # The model thinks it is bone dry; the probe says the soil is wet.
+    modelled = capacity
+    assert is_watering_due(modelled, capacity)
+
+    def due_with_sensor(deficit: float, sensor_pct: float | None) -> bool:
+        if sensor_pct is not None:
+            return sensor_pct < 30.0
+        return is_watering_due(deficit, capacity)
+
+    assert due_with_sensor(modelled, 62.0) is False, "a wet probe must win"
+    assert due_with_sensor(0.0, 11.0) is True, "a dry probe must win too"
+    assert due_with_sensor(modelled, None) is True, "no probe falls back to the model"

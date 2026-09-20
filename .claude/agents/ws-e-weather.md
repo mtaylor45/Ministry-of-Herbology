@@ -29,7 +29,13 @@ It is written once, in `workers/weather/tasks.py`, and nowhere else.
 - `f_cover` is 0 under a porch roof and 1 under open sky. This is the single
   most commonly got-wrong part of the model.
 - Containers hold far less than open ground and cross their threshold first.
-- A soil moisture sensor reading, when present, **overrides** the model.
+- A soil moisture sensor reading, when present, **overrides** the model. No
+  such hardware exists today (ADR 0010), so **the model-only path is the
+  shipping path**: every engine must produce a complete, correct answer with
+  zero sensor sources configured. A missing sensor is the normal case, not a
+  degraded one — and with nothing measuring the soil, the balance is the sole
+  authority on outdoor watering. Where `water_k_c` is uncited, the
+  recommendation carries that uncertainty through to the UI (ADR 0004).
 - Indoor plants do not use this engine at all; they use interval rules adjusted
   by season and indoor humidity.
 - When rain clears the deficit, the task becomes **satisfied**, not deleted.

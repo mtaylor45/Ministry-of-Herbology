@@ -13,10 +13,11 @@ COPY api/pyproject.toml /srv/api/pyproject.toml
 RUN pip install --no-cache-dir /srv/api
 
 COPY api/ /srv/api/
+COPY workers/ /srv/workers/
 COPY contracts/ /srv/contracts/
 COPY fixtures/ /srv/fixtures/
 
-ENV PYTHONPATH=/srv/api
+ENV PYTHONPATH=/srv/api:/srv
 USER herbology
 
 EXPOSE 8000

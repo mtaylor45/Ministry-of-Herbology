@@ -27,14 +27,28 @@ OWNERSHIP: dict[str, list[str]] = {
     "F": ["workers/hub/"],
     "G": ["api/tending/"],
     "H": ["api/grounds/", "web/src/lib/map/"],
-    "I": ["web/src/lib/ui/", "web/src/app-shell/", "web/src/app.html", "web/static/"],
+    "I": [
+        "web/src/lib/ui/",
+        "web/src/app-shell/",
+        "web/src/app.html",
+        "web/static/",
+        # The component gallery is a design-system artefact, not a feature
+        # screen, so it belongs to I even though it lives under routes/.
+        "web/src/routes/gallery/",
+    ],
     "J": ["web/src/routes/"],
     "K": ["workers/plates/", "web/src/routes/journal/"],
     "L": ["tests/", "fixtures/", "docs/user/"],
 }
 
-#: Anyone may add to their own sprint notes and read-only docs.
-ALWAYS_ALLOWED = ("docs/sprints/",)
+#: Anyone may write these. Sprint notes are shared by design; the
+#: NOT_YET_IMPLEMENTED list is a shared progress marker rather than L's test
+#: logic, and rule 6 requires the workstream that implements a path to strike
+#: its own entry — so making it L-only was a contradiction every sprint hits.
+ALWAYS_ALLOWED = (
+    "docs/sprints/",
+    "tests/contract/test_api_matches_spec.py",
+)
 
 #: Nobody but A touches these, whatever else their branch says.
 A_ONLY = ("contracts/", "docs/adr/", "CLAUDE.md", "docs/plan/")
