@@ -18,6 +18,8 @@
     padding: var(--moh-space-6) var(--moh-space-4);
   }
   @media (min-width: 900px) {
-    main { margin-left: 14rem; }
+    main {
+      margin-left: 14rem;
+    }
   }
 </style>

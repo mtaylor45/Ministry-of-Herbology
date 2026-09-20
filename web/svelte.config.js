@@ -9,7 +9,7 @@ export default {
     alias: {
       $ui: 'src/lib/ui',
       $map: 'src/lib/map',
-      $api: 'src/lib/api'
-    }
-  }
+      $api: 'src/lib/api',
+    },
+  },
 };

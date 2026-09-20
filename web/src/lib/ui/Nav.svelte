@@ -7,7 +7,7 @@
     { href: '/register', themed: 'The Register', plain: 'Inventory' },
     { href: '/grounds', themed: 'The Grounds', plain: 'Maps' },
     { href: '/almanac', themed: 'The Almanac', plain: 'Weather' },
-    { href: '/office', themed: 'Ministry Office', plain: 'Settings' }
+    { href: '/office', themed: 'Ministry Office', plain: 'Settings' },
   ];
 
   const isCurrent = (href: string, pathname: string) =>
@@ -45,7 +45,9 @@
     padding: 0;
     list-style: none;
   }
-  li { flex: 1; }
+  li {
+    flex: 1;
+  }
   a {
     display: flex;
     flex-direction: column;
@@ -66,7 +68,10 @@
     font-family: var(--moh-font-display);
     font-size: var(--moh-text-xs);
   }
-  .plain { font-size: var(--moh-text-xs); opacity: 0.75; }
+  .plain {
+    font-size: var(--moh-text-xs);
+    opacity: 0.75;
+  }
 
   @media (min-width: 900px) {
     nav {
@@ -75,9 +80,21 @@
       border-top: none;
       border-right: 1px solid var(--moh-border);
     }
-    ul { flex-direction: column; padding-top: var(--moh-space-8); }
-    a { flex-direction: row; justify-content: flex-start; gap: var(--moh-space-2); padding-inline: var(--moh-space-4); }
-    a[aria-current='page'] { box-shadow: inset 3px 0 0 var(--moh-accent); }
-    .themed { font-size: var(--moh-text-base); }
+    ul {
+      flex-direction: column;
+      padding-top: var(--moh-space-8);
+    }
+    a {
+      flex-direction: row;
+      justify-content: flex-start;
+      gap: var(--moh-space-2);
+      padding-inline: var(--moh-space-4);
+    }
+    a[aria-current='page'] {
+      box-shadow: inset 3px 0 0 var(--moh-accent);
+    }
+    .themed {
+      font-size: var(--moh-text-base);
+    }
   }
 </style>

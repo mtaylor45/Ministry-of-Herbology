@@ -280,10 +280,10 @@ S4; v1.0 ships at the end of S10.
 These need answers before the sprint that depends on them. Tracked in
 `docs/adr/0006-open-decisions.md`.
 
-- Paid APIs acceptable? Perenual tier, image generation, the one-time Google SDM
-  fee. **Needed by S2.**
+- ~~Paid APIs acceptable?~~ **Answered: free sources only** (ADR 0007).
+  Perenual and generated plates stay behind disabled feature flags.
 - Nest route: HA Nest integration (SDM API) or Matter? **Needed by S3.**
 - Survey format: PDF plat, CAD file, or satellite image only? **Needed by S7.**
-- Separate logins per household member, or one shared login with a member picker?
-  **Needed by S4.**
+- ~~Separate logins per household member, or one shared login with a member
+  picker?~~ **Answered: shared login with a member picker** (ADR 0008).
 - Any irrigation hardware to control (e.g. Rachio via HA)? If yes, add to S9 or v1.1.

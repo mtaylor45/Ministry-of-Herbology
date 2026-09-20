@@ -45,11 +45,17 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: A workstream writes only inside its own paths
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=0
+          git fetch --no-tags origin "$BASE_REF"
+          # A branch that does not name a workstream skips the check; the
+          # script says so rather than failing.
+          workstream=$(printf '%s' "$HEAD_REF" | sed -n 's|^ws-\([a-lA-L]\)/.*|\1|p')
           python scripts/check_ownership.py \
-            --base "origin/${{ github.base_ref }}" \
-            --workstream "$(echo '${{ github.head_ref }}' | sed -n 's|^ws-\([a-lA-L]\)/.*|\1|p')"
+            --base "origin/$BASE_REF" \
+            ${workstream:+--workstream "$workstream"}
 
   api:
     name: API and engines
@@ -90,6 +96,8 @@ jobs:
         run: npm ci || npm install
       - name: Sync SvelteKit
         run: npx svelte-kit sync
+      - name: Lint and typecheck
+        run: npm run lint
       - name: Unit tests, including the WCAG AA token checks
         run: npm run test
       - name: Build
