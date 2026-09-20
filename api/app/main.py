@@ -10,6 +10,10 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Workstream D's routes live under workers/, which the API image puts on
+# PYTHONPATH alongside api/ (ADR 0011 §4).
+from workers.botany.router import router as botany_router
+
 from almanac.router import router as almanac_router
 from app.settings import get_settings
 from grounds.router import router as grounds_router
@@ -37,6 +41,7 @@ app.add_middleware(
 )
 
 app.include_router(inventory_router, prefix="/api/v1")
+app.include_router(botany_router, prefix="/api/v1")
 app.include_router(almanac_router, prefix="/api/v1")
 app.include_router(tending_router, prefix="/api/v1")
 app.include_router(grounds_router, prefix="/api/v1")
