@@ -7,6 +7,7 @@ the API route and the tests all get the same worker.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Any
 
 from .connectors.base import Connector
 from .connectors.gbif import GbifConnector
@@ -43,6 +44,35 @@ def build_connectors(settings: BotanySettings | None = None) -> list[Connector]:
     ]
 
 
+def build_enrichment_connectors(settings: BotanySettings | None = None) -> list[Any]:
+    """The sources to ask about a resolved species, in precedence order.
+
+    USDA, then Wikidata, then Wikipedia — the free path, complete on its own
+    (ADR 0007). Perenual joins only when a key is configured, and can then only
+    add to an answer: ``SOURCE_RANK`` puts it below all three.
+    """
+    settings = settings or get_settings()
+    if settings.mock_mode:
+        from .mocks import build_mock_enrichment_connectors
+
+        return build_mock_enrichment_connectors(settings)
+
+    from .connectors.perenual import PerenualConnector
+    from .connectors.usda import UsdaConnector
+    from .connectors.wikidata import WikidataConnector
+    from .connectors.wikipedia import WikipediaConnector
+
+    fetcher = HttpFetcher(settings)
+    connectors: list[Any] = [
+        UsdaConnector(fetcher),
+        WikidataConnector(fetcher),
+        WikipediaConnector(fetcher),
+    ]
+    if settings.enable_perenual and settings.perenual_api_key:
+        connectors.append(PerenualConnector(fetcher, settings.perenual_api_key))
+    return connectors
+
+
 def build_resolver(settings: BotanySettings | None = None) -> TaxonResolver:
     return TaxonResolver(build_connectors(settings))
 
@@ -53,5 +83,14 @@ def get_resolver() -> TaxonResolver:
     return build_resolver()
 
 
+@lru_cache
+def get_enricher() -> Any:
+    """The process-wide enricher, sharing the resolver's HTTP client and cache."""
+    from .enricher import SpeciesEnricher
+
+    return SpeciesEnricher(build_enrichment_connectors())
+
+
 def reset_resolver() -> None:
     get_resolver.cache_clear()
+    get_enricher.cache_clear()

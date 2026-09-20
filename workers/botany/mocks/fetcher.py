@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode
 
 from ..connectors.base import Connector, FetchResult
 from ..connectors.gbif import GbifConnector
@@ -45,6 +45,18 @@ def recording_name(kind: str, url: str, params: dict[str, Any]) -> str | None:
             return f"gbif/vernacular__{path.split('/')[-2]}.json"
     if kind == "powo" and path.endswith("/search"):
         return f"powo/search__{slug(str(params.get('q', '')))}.json"
+    if kind == "wikipedia" and "/page/summary/" in path:
+        return f"wikipedia/summary__{slug(unquote(path.rsplit('/', 1)[-1]))}.json"
+    if kind == "wikidata":
+        if params.get("props") == "labels":
+            return f"wikidata/labels__{slug(str(params.get('ids', '')))}.json"
+        subject = params.get("titles") or params.get("ids") or ""
+        return f"wikidata/entity__{slug(str(subject))}.json"
+    if kind == "usda":
+        if path.endswith("/PlantSearch"):
+            return f"usda/search__{slug(str(params.get('searchText', '')))}.json"
+        if "/PlantCharacteristics/" in path:
+            return f"usda/characteristics__{path.rsplit('/', 1)[-1]}.json"
     return None
 
 
@@ -134,6 +146,21 @@ class RecordedFetcher:
                 "results": [],
                 **_synthetic(),
             }
+        if kind == "wikipedia":
+            row, score = self._best_fixture(query or _title_from(path))
+            return (
+                _wikipedia_payload(row)
+                if row
+                else {"type": "no-extract", **_synthetic()}
+            )
+        if kind == "wikidata":
+            return {"entities": {}, **_synthetic()}
+        if kind == "usda":
+            # USDA has a profile for most plants and characteristics for very
+            # few. With nothing recorded, the mock says the same as the live
+            # service does for seven of the eight fixture species: nothing.
+            return []
+
         # POWO indexes names, not the fixtures' care profiles: for anything not
         # recorded it says nothing, and GBIF carries the mock on its own.
         return {
@@ -198,6 +225,31 @@ def _search_result(row: dict[str, Any], score: float) -> dict[str, Any]:
     return payload
 
 
+def _title_from(path: str) -> str:
+    return unquote(path.rsplit("/", 1)[-1]).replace("_", " ")
+
+
+def _wikipedia_payload(row: dict[str, Any]) -> dict[str, Any]:
+    """A summary payload carrying the fixture's own Compendium prose.
+
+    The fixtures ship a `summary` for each species; mock mode serves that rather
+    than a paragraph invented here.
+    """
+    name = row.get("accepted_name", "")
+    return {
+        "type": "standard",
+        "title": name,
+        "extract": row.get("summary") or "",
+        "description": "Species of plant",
+        "content_urls": {
+            "desktop": {
+                "page": f"https://en.wikipedia.org/wiki/{name.replace(' ', '_')}"
+            }
+        },
+        **_synthetic(),
+    }
+
+
 def build_mock_connectors(settings: BotanySettings | None = None) -> list[Connector]:
     """POWO and GBIF, wired to recordings instead of the network."""
     settings = settings or get_settings()
@@ -205,4 +257,25 @@ def build_mock_connectors(settings: BotanySettings | None = None) -> list[Connec
     return [
         PowoConnector(fetcher, settings.powo_base_url),
         GbifConnector(fetcher, settings.gbif_base_url),
+    ]
+
+
+def build_mock_enrichment_connectors(
+    settings: BotanySettings | None = None,
+) -> list[Any]:
+    """USDA, Wikidata and Wikipedia, wired to recordings instead of the network.
+
+    Perenual is absent rather than mocked: ADR 0007 keeps it off, and a mock of
+    a source nobody may call would only prove the mock works.
+    """
+    from ..connectors.usda import UsdaConnector
+    from ..connectors.wikidata import WikidataConnector
+    from ..connectors.wikipedia import WikipediaConnector
+
+    settings = settings or get_settings()
+    fetcher = RecordedFetcher(settings)
+    return [
+        UsdaConnector(fetcher),
+        WikidataConnector(fetcher),
+        WikipediaConnector(fetcher),
     ]

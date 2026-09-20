@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import quote
 
 from ..sources import build_source
-from .base import ConnectorResult, Fetcher, FactRecord, SpeciesRef
+from .base import ConnectorResult, FactRecord, Fetcher, SpeciesRef
 from .base import register as _register
 
 KIND = "wikipedia"
