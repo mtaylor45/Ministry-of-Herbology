@@ -15,10 +15,9 @@ from .connectors.powo import PowoConnector
 from .resolve import TaxonResolver
 from .settings import BotanySettings, get_settings
 
-#: Sources that need a key or a paid tier, gated on open decision 1 in
-#: ``docs/adr/0006-open-decisions.md``. Until the maintainer answers, the free
-#: path has to be complete on its own — so these only ever *add* to the answer,
-#: and S1 ships with both off.
+#: Sources that need a key or a paid tier. ADR 0007 keeps them off: the free
+#: path has to be complete on its own, so these can only ever *add* to an answer,
+#: never be the reason one is missing. Both are off unless a key is configured.
 FLAGGED_SOURCES = ("perenual", "plantnet")
 
 

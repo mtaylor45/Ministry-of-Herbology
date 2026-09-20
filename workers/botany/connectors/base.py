@@ -130,7 +130,9 @@ def registered() -> Mapping[str, Callable[..., Connector]]:
 
 def build(kind: str, *args: Any, **kwargs: Any) -> Connector:
     if kind not in _REGISTRY:
-        raise KeyError(f"no connector registered for {kind!r}; registered: {sorted(_REGISTRY)}")
+        raise KeyError(
+            f"no connector registered for {kind!r}; registered: {sorted(_REGISTRY)}"
+        )
     return _REGISTRY[kind](*args, **kwargs)
 
 

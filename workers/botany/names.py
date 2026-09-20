@@ -17,7 +17,9 @@ from difflib import SequenceMatcher
 #: ``'Hidcote'``, ``‘Hidcote’``, ``"Hidcote"``, ``cv. Hidcote``. The quoted form
 #: is the ICNCP one; the others are what people actually type.
 _CULTIVAR_QUOTED = re.compile(r"[‘'\"“]\s*([^’'\"”]+?)\s*[’'\"”]")
-_CULTIVAR_MARKER = re.compile(r"\b(?:cv\.?|cultivar)\s+([\w][\w'’-]*(?:\s+[A-Z][\w'’-]*)*)", re.I)
+_CULTIVAR_MARKER = re.compile(
+    r"\b(?:cv\.?|cultivar)\s+([\w][\w'’-]*(?:\s+[A-Z][\w'’-]*)*)", re.IGNORECASE
+)
 
 #: ``Citrus x limon`` and ``Citrus X limon`` mean ``Citrus × limon``.
 _HYBRID_X = re.compile(r"(?<=\s)[xX](?=\s)")
@@ -152,7 +154,10 @@ def parse_name(raw: str) -> ParsedName:
 
 def _is_epithet(word: str) -> bool:
     """A species epithet is one lowercase-able Latin word, not ``plant`` or ``lily``."""
-    return bool(re.fullmatch(r"[A-Za-zÀ-ɏ-]{3,}\.?", word)) or word.lower() in _RANK_MARKERS
+    return (
+        bool(re.fullmatch(r"[A-Za-zÀ-ɏ-]{3,}\.?", word))
+        or word.lower() in _RANK_MARKERS
+    )
 
 
 def similarity(left: str, right: str) -> float:
@@ -173,7 +178,9 @@ def fold(text: str) -> str:
     """
     decomposed = unicodedata.normalize("NFKD", text.replace("×", " x "))
     without_marks = "".join(c for c in decomposed if not unicodedata.combining(c))
-    words = [w for w in _collapse(without_marks).casefold().split(" ") if w and w != "x"]
+    words = [
+        w for w in _collapse(without_marks).casefold().split(" ") if w and w != "x"
+    ]
     return " ".join(words)
 
 

@@ -44,10 +44,20 @@ class BotanySettings(BaseSettings):
     powo_base_url: str = "https://powo.science.kew.org/api/2"
     gbif_base_url: str = "https://api.gbif.org/v1"
 
-    #: Open decision 1 (ADR 0006): paid and key-gated sources stay off until the
-    #: maintainer answers, and the free path must be complete without them.
-    enable_perenual: bool = False
-    enable_plantnet: bool = False
+    #: ADR 0007 settled this: free and openly licensed sources only. Perenual and
+    #: Pl@ntNet stay behind their key, disabled, and the free path — POWO and
+    #: GBIF here, Wikipedia, Wikidata and USDA in S2 — must be complete on its
+    #: own rather than degraded-but-shipping. Setting a key is the whole flag.
+    perenual_api_key: str | None = None
+    plantnet_api_key: str | None = None
+
+    @property
+    def enable_perenual(self) -> bool:
+        return bool(self.perenual_api_key)
+
+    @property
+    def enable_plantnet(self) -> bool:
+        return bool(self.plantnet_api_key)
 
 
 @lru_cache

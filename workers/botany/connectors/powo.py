@@ -80,7 +80,9 @@ def _record(entry: dict[str, Any], parsed: ParsedName) -> TaxonRecord | None:
         return None
 
     accepted_flag = entry.get("accepted")
-    synonym_of = entry.get("synonymOf") if isinstance(entry.get("synonymOf"), dict) else None
+    synonym_of = (
+        entry.get("synonymOf") if isinstance(entry.get("synonymOf"), dict) else None
+    )
 
     if accepted_flag is False and synonym_of:
         accepted_name = _text(synonym_of, "name") or name
@@ -118,7 +120,9 @@ def _record(entry: dict[str, Any], parsed: ParsedName) -> TaxonRecord | None:
     )
 
 
-def parse_search(payload: dict[str, Any], parsed: ParsedName) -> tuple[TaxonRecord, ...]:
+def parse_search(
+    payload: dict[str, Any], parsed: ParsedName
+) -> tuple[TaxonRecord, ...]:
     """Records from ``/api/2/search``, best first, as POWO ordered them."""
     records = []
     for entry in payload.get("results") or []:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -15,6 +17,12 @@ from ..names import fold, parse_name, similarity
 from ..settings import BotanySettings, get_settings
 
 RECORDED_DIR = Path(__file__).resolve().parent / "recorded"
+
+#: The day every payload in ``recorded/`` was fetched. A replay is cited with
+#: this, not with the clock: a citation that claims to be fresh is a citation
+#: that lies, and a git checkout's file timestamps say nothing about the source.
+#: Re-record the directory, bump this, and say so in ``recorded/PROVENANCE.md``.
+RECORDED_ON = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 
 #: A fixture name has to be this close to the query before the mock offers it.
 FIXTURE_MATCH_FLOOR = 0.82
@@ -65,7 +73,7 @@ class RecordedFetcher:
         return self._species
 
     async def get_json(
-        self, kind: str, url: str, params: dict[str, Any] | None = None
+        self, kind: str, url: str, params: Mapping[str, Any] | None = None
     ) -> FetchResult:
         params = dict(params or {})
         self.calls.append((kind, url, params))
@@ -76,11 +84,17 @@ class RecordedFetcher:
             path = self.recorded_dir / name
             if path.exists():
                 return FetchResult(
-                    url=full_url, payload=json.loads(path.read_text()), is_mock=True
+                    url=full_url,
+                    payload=json.loads(path.read_text()),
+                    retrieved_at=RECORDED_ON,
+                    is_mock=True,
                 )
 
         return FetchResult(
-            url=full_url, payload=self._from_fixtures(kind, url, params), is_mock=True
+            url=full_url,
+            payload=self._from_fixtures(kind, url, params),
+            retrieved_at=RECORDED_ON,
+            is_mock=True,
         )
 
     # ---------------------------------------------------------------- fixtures
@@ -94,26 +108,51 @@ class RecordedFetcher:
             return (
                 _match_payload(row, score)
                 if row
-                else {"confidence": 0, "matchType": "NONE", "synonym": False, **_synthetic()}
+                else {
+                    "confidence": 0,
+                    "matchType": "NONE",
+                    "synonym": False,
+                    **_synthetic(),
+                }
             )
         if kind == "gbif" and path.endswith("/species/search"):
             row, score = self._best_fixture(query)
             rows = [(row, score)] if row else []
-            return {"offset": 0, "limit": 5, "endOfRecords": True, "count": len(rows),
-                    "results": [_search_result(r, s) for r, s in rows], **_synthetic()}
+            return {
+                "offset": 0,
+                "limit": 5,
+                "endOfRecords": True,
+                "count": len(rows),
+                "results": [_search_result(r, s) for r, s in rows],
+                **_synthetic(),
+            }
         if kind == "gbif" and path.endswith("/vernacularNames"):
-            return {"offset": 0, "limit": 100, "endOfRecords": True, "results": [], **_synthetic()}
+            return {
+                "offset": 0,
+                "limit": 100,
+                "endOfRecords": True,
+                "results": [],
+                **_synthetic(),
+            }
         # POWO indexes names, not the fixtures' care profiles: for anything not
         # recorded it says nothing, and GBIF carries the mock on its own.
-        return {"totalResults": 0, "page": 1, "perPage": 10, "totalPages": 0,
-                "results": [], **_synthetic()}
+        return {
+            "totalResults": 0,
+            "page": 1,
+            "perPage": 10,
+            "totalPages": 0,
+            "results": [],
+            **_synthetic(),
+        }
 
     def _best_fixture(self, query: str) -> tuple[dict[str, Any] | None, float]:
         parsed = parse_name(query)
         best: tuple[dict[str, Any] | None, float] = (None, 0.0)
         for row in self.species:
             scores = [similarity(parsed.lookup, row.get("accepted_name", ""))]
-            scores += [similarity(parsed.text, c) for c in row.get("common_names") or []]
+            scores += [
+                similarity(parsed.text, c) for c in row.get("common_names") or []
+            ]
             score = max(scores)
             if score > best[1]:
                 best = (row, score)
@@ -140,7 +179,7 @@ def _match_payload(row: dict[str, Any], score: float) -> dict[str, Any]:
         "status": "ACCEPTED",
         # The match score is the fixture name's own similarity to the query, not
         # a number anybody made up.
-        "confidence": int(round(score * 100)),
+        "confidence": round(score * 100),
         "matchType": "EXACT" if score > 0.999 else "FUZZY",
         "family": row.get("family"),
         "genus": row.get("genus"),

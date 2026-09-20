@@ -11,7 +11,7 @@ import asyncio
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Self
 
 import httpx
 
@@ -50,7 +50,7 @@ class HttpFetcher:
         self._lock = asyncio.Lock()
         self._payloads: dict[str, FetchResult] = {}
 
-    async def __aenter__(self) -> HttpFetcher:
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -65,7 +65,10 @@ class HttpFetcher:
     def client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
-                headers={"User-Agent": self.settings.user_agent, "Accept": "application/json"},
+                headers={
+                    "User-Agent": self.settings.user_agent,
+                    "Accept": "application/json",
+                },
                 timeout=self.settings.http_timeout_s,
                 follow_redirects=True,
             )
@@ -111,13 +114,17 @@ class HttpFetcher:
         if response is None:
             raise SourceUnavailable(f"{kind}: {last_error}") from last_error
         if response.status_code >= 400:
-            raise SourceUnavailable(f"{kind}: HTTP {response.status_code} for {response.url}")
+            raise SourceUnavailable(
+                f"{kind}: HTTP {response.status_code} for {response.url}"
+            )
         try:
             payload = response.json()
         except ValueError as exc:
             # POWO behind a bot challenge answers 200 with HTML, which is not a
             # taxonomic opinion. Treat it as unreachable, not as "no match".
-            raise SourceUnavailable(f"{kind}: expected JSON from {response.url}") from exc
+            raise SourceUnavailable(
+                f"{kind}: expected JSON from {response.url}"
+            ) from exc
 
         result = FetchResult(
             url=str(response.url), payload=payload, retrieved_at=datetime.now(UTC)

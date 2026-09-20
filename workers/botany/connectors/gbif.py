@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..names import ParsedName, fold, similarity
+from ..names import ParsedName, similarity
 from ..sources import build_source
 from .base import ConnectorResult, Fetcher, TaxonRecord
 from .base import register as _register
@@ -69,7 +69,12 @@ def _key(payload: dict[str, Any], *keys: str) -> str | None:
 def _status(raw: str | None) -> str:
     if raw in {"ACCEPTED", "DOUBTFUL"}:
         return "accepted" if raw == "ACCEPTED" else "unknown"
-    if raw in {"SYNONYM", "HETEROTYPIC_SYNONYM", "HOMOTYPIC_SYNONYM", "PROPARTE_SYNONYM"}:
+    if raw in {
+        "SYNONYM",
+        "HETEROTYPIC_SYNONYM",
+        "HOMOTYPIC_SYNONYM",
+        "PROPARTE_SYNONYM",
+    }:
         return "synonym"
     return "unknown"
 
@@ -123,17 +128,23 @@ def parse_match(payload: dict[str, Any], parsed: ParsedName) -> tuple[TaxonRecor
         if match_kind is None:
             continue
         confidence = entry.get("confidence")
-        score = float(confidence) / 100.0 if isinstance(confidence, int | float) else 0.5
+        score = (
+            float(confidence) / 100.0 if isinstance(confidence, int | float) else 0.5
+        )
         if is_alternative:
             # GBIF ranks its alternatives below its pick; so do we.
             score *= 0.9
-        record = _record_from_entry(entry, parsed, match_kind=match_kind, source_score=min(score, 1.0))
+        record = _record_from_entry(
+            entry, parsed, match_kind=match_kind, source_score=min(score, 1.0)
+        )
         if record:
             records.append(record)
     return tuple(records)
 
 
-def _best_vernacular(names: list[dict[str, Any]], parsed: ParsedName) -> tuple[str | None, float]:
+def _best_vernacular(
+    names: list[dict[str, Any]], parsed: ParsedName
+) -> tuple[str | None, float]:
     """The English common name closest to what the user typed, and how close.
 
     GBIF checklists sometimes pack a dozen names into one comma-separated
@@ -158,7 +169,9 @@ def _best_vernacular(names: list[dict[str, Any]], parsed: ParsedName) -> tuple[s
     return best
 
 
-def parse_search(payload: dict[str, Any], parsed: ParsedName) -> tuple[TaxonRecord, ...]:
+def parse_search(
+    payload: dict[str, Any], parsed: ParsedName
+) -> tuple[TaxonRecord, ...]:
     """Records from ``/species/search`` — the path a common name takes."""
     records: list[TaxonRecord] = []
     for entry in payload.get("results") or []:
@@ -169,7 +182,9 @@ def parse_search(payload: dict[str, Any], parsed: ParsedName) -> tuple[TaxonReco
         if vernacular_score >= name_score:
             match_kind, score = "vernacular", vernacular_score
         else:
-            match_kind, score = ("exact" if name_score > 0.999 else "partial"), name_score
+            match_kind, score = (
+                "exact" if name_score > 0.999 else "partial"
+            ), name_score
         record = _record_from_entry(
             entry,
             parsed,
@@ -226,7 +241,9 @@ class GbifConnector:
 
     kind = KIND
 
-    def __init__(self, fetcher: Fetcher, base_url: str = "https://api.gbif.org/v1") -> None:
+    def __init__(
+        self, fetcher: Fetcher, base_url: str = "https://api.gbif.org/v1"
+    ) -> None:
         self.fetcher = fetcher
         self.base_url = base_url.rstrip("/")
 
@@ -302,10 +319,15 @@ class GbifConnector:
                     ]
         except SourceUnavailable as exc:
             return ConnectorResult(
-                kind=KIND, records=tuple(records), sources=tuple(sources), error=str(exc)
+                kind=KIND,
+                records=tuple(records),
+                sources=tuple(sources),
+                error=str(exc),
             )
 
-        return ConnectorResult(kind=KIND, records=tuple(records), sources=tuple(sources))
+        return ConnectorResult(
+            kind=KIND, records=tuple(records), sources=tuple(sources)
+        )
 
 
 def _as_dict(record: TaxonRecord) -> dict[str, Any]:

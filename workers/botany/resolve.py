@@ -118,7 +118,9 @@ def _first(records: Sequence[TaxonRecord], attribute: str) -> Any:
     return None
 
 
-def _source_for(record: TaxonRecord, results: Sequence[ConnectorResult]) -> dict[str, Any] | None:
+def _source_for(
+    record: TaxonRecord, results: Sequence[ConnectorResult]
+) -> dict[str, Any] | None:
     for result in results:
         if result.kind == record.source_kind and result.sources:
             return result.sources[0].to_ref()
@@ -193,7 +195,9 @@ def rank_candidates(
         kinds = {r.source_kind for r in records}
         corroborated = 1.0 if len(kinds) > 1 else 0.0
         score = round(
-            QUALITY_WEIGHT * _record_quality(lead) + CORROBORATION_WEIGHT * corroborated, 4
+            QUALITY_WEIGHT * _record_quality(lead)
+            + CORROBORATION_WEIGHT * corroborated,
+            4,
         )
         scored.append((score, records))
 
