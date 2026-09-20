@@ -1,61 +1,56 @@
 """Specimens, locations and members.
 
-Owner: Workstream C. This is the S0 mock: it answers the contract from
-``fixtures/`` so that J, H and G can build against a real HTTP surface. C
-replaces the bodies with database-backed ones in S1; the response shapes are
-fixed by ``contracts/openapi/openapi.yaml`` and must not change here.
+Owner: Workstream C. S1 made this database-backed: the handlers below are thin,
+and the work happens in ``inventory.repository`` — ``FixtureRepository`` when
+``MOH_MOCK_MODE=true``, ``DatabaseRepository`` when a Postgres is attached. Both
+answer the same protocol and both serialise through ``inventory.schemas``, so
+the shapes the contract fixes in ``contracts/openapi/openapi.yaml`` are built in
+exactly one place.
+
+The ``/species`` endpoints at the foot of the file belong to Workstream D
+(``x-workstream: D``); they are still the S0 fixture mock and are left alone.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app import fixtures
+from inventory import enrichment
+from inventory.repository import (
+    InventoryRepository,
+    SpecimenQuery,
+    UnknownLocationError,
+    UnknownSpeciesError,
+    get_repository,
+)
+from inventory.schemas import (
+    LocationCreate,
+    SpecimenCreate,
+    SpecimenUpdate,
+    location_out,
+    specimen_out,
+)
 
 router = APIRouter(tags=["inventory"])
 
-
-def _location_out(row: dict[str, Any]) -> dict[str, Any]:
-    count = sum(1 for s in fixtures.specimens() if s.get("location_id") == row["id"])
-    return {**row, "specimen_count": count}
+Repo = Depends(get_repository)
 
 
-def _species_brief(species_id: str | None) -> dict[str, Any] | None:
-    sp = fixtures.by_id(fixtures.species(), species_id or "")
-    if not sp:
-        return None
-    return {
-        "id": sp["id"],
-        "accepted_name": sp["accepted_name"],
-        "common_name": (sp.get("common_names") or [None])[0],
-        "family": sp.get("family"),
-    }
+def _offset_from(cursor: str | None) -> int:
+    if not cursor:
+        return 0
+    try:
+        offset = int(cursor)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Malformed cursor") from None
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="Malformed cursor")
+    return offset
 
 
-def _specimen_out(row: dict[str, Any]) -> dict[str, Any]:
-    location = fixtures.by_id(fixtures.locations(), row.get("location_id") or "")
-    return {
-        "id": row["id"],
-        "display_name": fixtures.display_name(row),
-        "nickname": row.get("nickname"),
-        "cultivar": row.get("cultivar"),
-        "species": _species_brief(row.get("species_id")),
-        "is_group": row.get("is_group", False),
-        "count": row.get("count", 1),
-        "location": _location_out(location) if location else None,
-        "map_layer_id": row.get("map_layer_id"),
-        "pin_px": row.get("pin_px"),
-        "is_outdoor": row.get("is_outdoor", False),
-        "in_container": row.get("in_container", True),
-        "container_litres": row.get("container_litres"),
-        "soil_note": row.get("soil_note"),
-        "acquired_on": row.get("acquired_on"),
-        "provenance": row.get("provenance"),
-        "status": row.get("status", "thriving"),
-        "primary_photo_url": None,
-        "next_task": None,
-        "created_at": "2026-09-20T00:00:00Z",
-    }
+# ------------------------------------------------------------------ specimens
 
 
 @router.get("/specimens")
@@ -63,71 +58,210 @@ async def list_specimens(
     q: str | None = None,
     location_id: str | None = None,
     outdoor: bool | None = None,
-    status: str | None = None,
+    status_: str | None = Query(default=None, alias="status"),
     toxic_to_pets: bool | None = None,
-    limit: int = Query(50, le=200),
+    limit: int = Query(50, ge=1, le=200),
+    cursor: str | None = None,
+    repo: InventoryRepository = Repo,
 ) -> dict[str, Any]:
-    rows = fixtures.specimens()
-    if location_id:
-        rows = [r for r in rows if r.get("location_id") == location_id]
-    if outdoor is not None:
-        rows = [r for r in rows if r.get("is_outdoor") is outdoor]
-    if status:
-        rows = [r for r in rows if r.get("status") == status]
-    if toxic_to_pets is not None:
+    """The Register. Archived plants are kept out unless asked for by status."""
+    page = await repo.list_specimens(
+        SpecimenQuery(
+            q=q,
+            location_id=location_id,
+            outdoor=outdoor,
+            status=status_,
+            toxic_to_pets=toxic_to_pets,
+            limit=limit,
+            offset=_offset_from(cursor),
+        )
+    )
+    return {
+        "items": [specimen_out(row) for row in page.items],
+        "next_cursor": page.next_cursor,
+        "total": page.total,
+    }
 
-        def _toxic(r: dict[str, Any]) -> bool:
-            sp = fixtures.by_id(fixtures.species(), r.get("species_id") or "")
-            return bool(sp and sp.get("toxic_to_pets"))
 
-        rows = [r for r in rows if _toxic(r) is toxic_to_pets]
-    if q:
-        needle = q.casefold()
-        rows = [r for r in rows if needle in fixtures.display_name(r).casefold()]
-    items = [_specimen_out(r) for r in rows[:limit]]
-    return {"items": items, "next_cursor": None, "total": len(rows)}
+@router.post("/specimens", status_code=status.HTTP_201_CREATED)
+async def create_specimen(
+    body: SpecimenCreate,
+    repo: InventoryRepository = Repo,
+) -> dict[str, Any]:
+    """Add a plant by name.
+
+    The typed name is matched against the species already known; if nothing
+    matches, the name becomes the specimen's nickname so it appears in the
+    Register under what the keeper actually typed, and resolution is left to
+    Workstream D's queue. The response never waits on that.
+    """
+    species_id: str | None = str(body.species_id) if body.species_id else None
+    if species_id is None:
+        species_id = await repo.resolve_species_by_name(body.name)
+
+    data = body.model_dump(exclude={"name", "image_key"})
+    data["species_id"] = species_id
+    # An unmatched name has nowhere else to live in the frozen schema; see the
+    # PR notes. A matched one leaves the nickname empty so the display name
+    # falls through to the common name, as the contract describes.
+    data["nickname"] = body.nickname or (None if species_id else body.name)
+
+    try:
+        row = await repo.create_specimen(data)
+    except UnknownLocationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except UnknownSpeciesError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await enrichment.queue(
+        enrichment.EnrichmentRequest(
+            specimen_id=str(row["id"]),
+            typed_name=body.name,
+            species_id=species_id,
+            image_key=body.image_key,
+            queued_at=datetime.now(UTC),
+        )
+    )
+    return specimen_out(row)
 
 
 @router.get("/specimens/{specimen_id}")
-async def get_specimen(specimen_id: str) -> dict[str, Any]:
-    row = fixtures.by_id(fixtures.specimens(), specimen_id)
+async def get_specimen(
+    specimen_id: str, repo: InventoryRepository = Repo
+) -> dict[str, Any]:
+    row = await repo.get_specimen(specimen_id)
     if not row:
         raise HTTPException(status_code=404, detail="No such specimen")
-    return _specimen_out(row)
+    return specimen_out(row)
+
+
+@router.patch("/specimens/{specimen_id}")
+async def update_specimen(
+    specimen_id: str,
+    body: SpecimenUpdate,
+    repo: InventoryRepository = Repo,
+) -> dict[str, Any]:
+    """Edit a plant. Omitted fields are left alone; an explicit null clears one.
+
+    Moving a specimen to another location re-derives ``is_outdoor`` from it, so
+    a plant brought in for the winter leaves the frost alerts the moment it is
+    moved on the Register rather than the next time something recomputes.
+    """
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        row = await repo.get_specimen(specimen_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="No such specimen")
+        return specimen_out(row)
+
+    try:
+        row = await repo.update_specimen(specimen_id, changes)
+    except UnknownLocationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not row:
+        raise HTTPException(status_code=404, detail="No such specimen")
+    return specimen_out(row)
+
+
+@router.delete("/specimens/{specimen_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_specimen(
+    specimen_id: str, repo: InventoryRepository = Repo
+) -> Response:
+    """Archive, do not delete. A lost plant is part of the record.
+
+    The row keeps its logs, its photos and its history; it simply stops being
+    listed by the Register unless asked for with ``?status=archived``.
+    """
+    if not await repo.archive_specimen(specimen_id):
+        raise HTTPException(status_code=404, detail="No such specimen")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/specimens/{specimen_id}/photos")
 async def list_photos(specimen_id: str) -> list[dict[str, Any]]:
+    """S2 (C): the growth log. Empty until then."""
     return []
 
 
 @router.get("/specimens/{specimen_id}/log")
 async def list_log_entries(specimen_id: str) -> list[dict[str, Any]]:
+    """S2 (C): growth, pest, disease and repotting entries. Empty until then."""
     return []
+
+
+# ------------------------------------------------------------------ locations
 
 
 @router.get("/locations")
 async def list_locations(
-    site_id: str | None = None, outdoor: bool | None = None
+    site_id: str | None = None,
+    outdoor: bool | None = None,
+    repo: InventoryRepository = Repo,
 ) -> list[dict[str, Any]]:
-    rows = fixtures.locations()
-    if site_id:
-        rows = [r for r in rows if r.get("site_id") == site_id]
-    if outdoor is not None:
-        rows = [r for r in rows if r.get("is_outdoor") is outdoor]
-    return [_location_out(r) for r in rows]
+    rows = await repo.list_locations(site_id=site_id, outdoor=outdoor)
+    return [out for out in (location_out(r) for r in rows) if out is not None]
+
+
+@router.post("/locations", status_code=status.HTTP_201_CREATED)
+async def create_location(
+    body: LocationCreate, repo: InventoryRepository = Repo
+) -> dict[str, Any]:
+    """Add a place: a room, a shelf, a bed, or a zone drawn on a plan.
+
+    ``is_outdoor`` and ``is_covered`` are the two flags the weather engines
+    read — a covered outdoor zone collects no rain, an indoor one raises no
+    frost alerts — so both are recorded here rather than inferred later.
+    """
+    try:
+        row = await repo.create_location(body.model_dump())
+    except (UnknownLocationError, LookupError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    out = location_out(row)
+    assert out is not None
+    return out
+
+
+@router.patch("/locations/{location_id}")
+async def update_location(
+    location_id: str,
+    body: LocationCreate,
+    repo: InventoryRepository = Repo,
+) -> dict[str, Any]:
+    """Edit a place.
+
+    Changing ``is_outdoor`` carries every specimen standing in this location
+    with it, in one transaction: the denormalised flag on a specimen may never
+    disagree with its location's.
+    """
+    try:
+        row = await repo.update_location(location_id, body.model_dump())
+    except UnknownLocationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not row:
+        raise HTTPException(status_code=404, detail="No such location")
+    out = location_out(row)
+    assert out is not None
+    return out
+
+
+# -------------------------------------------------------------------- members
 
 
 @router.get("/members")
-async def list_members() -> list[dict[str, Any]]:
+async def list_members(repo: InventoryRepository = Repo) -> list[dict[str, Any]]:
+    rows = await repo.list_members()
     return [
         {
-            "id": "01890050-0000-7000-8000-000000000001",
-            "name": "Keeper",
-            "role": "keeper",
-            "notify_prefs": {},
-        },
+            "id": str(row["id"]),
+            "name": row["name"],
+            "role": row["role"],
+            "notify_prefs": row.get("notify_prefs") or {},
+        }
+        for row in rows
     ]
+
+
+# ------------------------------------------- species (Workstream D's, S0 mock)
 
 
 @router.get("/species")
