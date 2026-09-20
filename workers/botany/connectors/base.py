@@ -169,20 +169,24 @@ class EnrichmentConnector(Protocol):
     async def enrich(self, species: SpeciesRef) -> ConnectorResult: ...
 
 
-#: Connector factories by source kind, so S2 adds a module and a registration
-#: rather than another branch in the resolver.
-_REGISTRY: dict[str, Callable[..., Connector]] = {}
+#: Connector factories by source kind, so a new source is a module and a
+#: registration rather than another branch in the resolver. A source may answer
+#: either question — ``resolve`` a name, ``enrich`` a species, or both — and the
+#: registry holds them together because the citation path is the same.
+AnyConnector = Connector | EnrichmentConnector
+
+_REGISTRY: dict[str, Callable[..., AnyConnector]] = {}
 
 
-def register(kind: str, factory: Callable[..., Connector]) -> None:
+def register(kind: str, factory: Callable[..., AnyConnector]) -> None:
     _REGISTRY[kind] = factory
 
 
-def registered() -> Mapping[str, Callable[..., Connector]]:
+def registered() -> Mapping[str, Callable[..., AnyConnector]]:
     return dict(_REGISTRY)
 
 
-def build(kind: str, *args: Any, **kwargs: Any) -> Connector:
+def build(kind: str, *args: Any, **kwargs: Any) -> AnyConnector:
     if kind not in _REGISTRY:
         raise KeyError(
             f"no connector registered for {kind!r}; registered: {sorted(_REGISTRY)}"

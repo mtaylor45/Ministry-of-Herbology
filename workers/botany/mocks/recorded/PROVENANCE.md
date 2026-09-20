@@ -71,6 +71,86 @@ Two consequences worth keeping in mind:
    the live endpoint and this section deleted. Nothing else has to change: the
    parsers already read the real shape.
 
+## `usda/` — recorded live
+
+Fetched from `https://plantsservices.sc.egov.usda.gov/api` on **2026-09-20** by
+`python -m workers.botany.mocks.record`, unmodified. USDA PLANTS is public
+domain.
+
+`search__<name>.json` is `/api/PlantSearch?searchText=`; `characteristics__<id>.json`
+is `/api/PlantCharacteristics/{id}` for the id that search returned.
+
+**Read the characteristics files before assuming this source is rich.** Every
+plant has a profile; only a minority have characteristics. Of the eight fixture
+species, **all eight return `[]`** — including *Podophyllum peltatum*, a
+well-known North American native. `characteristics__15309.json` (*Abies
+balsamea*, balsam fir) is the exception and the reason that species is in the
+recorder's list at all: it is the only recording here that exercises the parser
+for a minimum temperature, a pH range, a shade tolerance and a toxicity rating.
+Without it those code paths would be tested against nothing.
+
+| File | Search result | First hit |
+| --- | --- | --- |
+| `search__abies-balsamea.json` | 5 hit(s) | Abies balsamea (L.) Mill. (ABBA) |
+| `search__citrus-limon.json` | 2 hit(s) | Citrus limon (L.) Burm. f., database artifact (CILI) |
+| `search__dracaena-trifasciata.json` | 0 hit(s) | — |
+| `search__hosta-sieboldiana.json` | 0 hit(s) | — |
+| `search__lavandula-angustifolia.json` | 1 hit(s) | Lavandula angustifolia Mill. (LAAN81) |
+| `search__mandragora-officinarum.json` | 1 hit(s) | Mandragora officinarum L. (MAOF) |
+| `search__monstera-deliciosa.json` | 1 hit(s) | Monstera deliciosa Liebm. (MODE) |
+| `search__ocimum-basilicum.json` | 1 hit(s) | Ocimum basilicum L. (OCBA) |
+| `search__rosa-gallica.json` | 4 hit(s) | Rosa gallica L. (ROGA) |
+
+| File | Characteristics |
+| --- | --- |
+| `characteristics__15309.json` | **81** |
+| `characteristics__16378.json` | none — USDA has measured nothing for this plant |
+| `characteristics__45812.json` | none — USDA has measured nothing for this plant |
+| `characteristics__46101.json` | none — USDA has measured nothing for this plant |
+| `characteristics__55128.json` | none — USDA has measured nothing for this plant |
+| `characteristics__90833.json` | none — USDA has measured nothing for this plant |
+
+| File | Source |
+| --- | --- |
+| `summary__monstera-deliciosa.json` | `/api/rest_v1/page/summary/Monstera_deliciosa` |
+| `entity__q161077.json` | `wbgetentities` for Q161077, `props=labels|claims` |
+
+The empty files are not padding. "USDA has no measured characteristics for this
+plant" is the normal case, and it is the case synthesis has to get right:
+`confidence: unknown`, no invented number.
+
+## `wikipedia/` and `wikidata/` — partially recorded
+
+Fetched on **2026-09-20** from `en.wikipedia.org/api/rest_v1` and
+`www.wikidata.org/w/api.php`, unmodified. Wikipedia text is CC BY-SA 4.0;
+Wikidata is CC0.
+
+Only **Monstera deliciosa** is recorded. Partway through recording, Wikimedia
+began answering this session's egress IP with its robot policy:
+
+```
+403 Please respect our robot policy https://w.wiki/4wJS when crawling us.
+```
+
+That is a rate limit on a shared cloud IP, not a fault in the connectors — the
+same requests succeeded minutes earlier. Rather than retry into a policy that
+asks us not to, or write a stand-in, the recording stops there:
+
+- `summary__monstera-deliciosa.json` and `entity__q161077.json` are real;
+- every other species falls back to `fixtures/species/species.json` in mock
+  mode, which is what the fallback is for;
+- `HttpFetcher` treats the 403 as **unreachable**, so a throttled Wikipedia
+  lowers confidence and never reads as "this plant has no care requirements".
+
+Re-run the recorder when the throttle clears; nothing in the code changes.
+
+## `perenual/` — deliberately absent
+
+There is no recording of Perenual and there should not be. ADR 0007 keeps it
+behind an unset `MOH_PERENUAL_API_KEY`, its terms are not an open licence, and
+a connector nobody may call is tested with a payload about a plant that does
+not exist (`Testus exampleii`) — the shape is what those tests check.
+
 ## Re-recording
 
 ```

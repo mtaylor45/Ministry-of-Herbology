@@ -18,11 +18,12 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from ..connectors.base import SpeciesRef
+from ..connectors.base import FetchResult, SpeciesRef
 from ..connectors.http import HttpFetcher
 from ..settings import get_settings
 from .fetcher import RECORDED_DIR, recording_name
@@ -51,7 +52,9 @@ class RecordingFetcher:
         self.out_dir = out_dir
         self.written: list[str] = []
 
-    async def get_json(self, kind: str, url: str, params: dict[str, Any] | None = None):
+    async def get_json(
+        self, kind: str, url: str, params: Mapping[str, Any] | None = None
+    ) -> FetchResult:
         result = await self.inner.get_json(kind, url, params)
         name = recording_name(kind, url, dict(params or {}))
         if name:
