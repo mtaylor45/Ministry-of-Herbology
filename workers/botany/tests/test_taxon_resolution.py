@@ -114,8 +114,8 @@ def test_a_common_name_costs_one_extra_call_and_no_more(resolve, resolver):
 
 def test_pl_ntnet_is_off_and_the_typed_name_path_does_not_notice(resolve):
     """ADR 0007: the free path is complete on its own, not degraded-but-shipping."""
-    from botany.factory import enabled_flagged_sources
-    from botany.settings import BotanySettings
+    from workers.botany.factory import enabled_flagged_sources
+    from workers.botany.settings import BotanySettings
 
     assert enabled_flagged_sources(BotanySettings()) == ()
     assert resolve("Monstera deliciosa").candidates[0].confidence == "high"

@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from botany.sources import SourceCache, build_source, source_id_for
+from workers.botany.sources import SourceCache, build_source, source_id_for
 
 WHEN = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 

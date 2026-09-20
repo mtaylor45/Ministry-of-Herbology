@@ -3,10 +3,10 @@
 Nothing here may invent a name. Confidence may only ever fall.
 """
 
-from botany.connectors.base import ConnectorResult, TaxonRecord
-from botany.names import parse_name
-from botany.resolve import TaxonResolver, rank_candidates
-from botany.sources import build_source
+from workers.botany.connectors.base import ConnectorResult, TaxonRecord
+from workers.botany.names import parse_name
+from workers.botany.resolve import TaxonResolver, rank_candidates
+from workers.botany.sources import build_source
 
 
 def record(name, kind, **kwargs):

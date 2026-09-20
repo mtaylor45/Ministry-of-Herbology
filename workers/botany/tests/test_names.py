@@ -1,6 +1,6 @@
 """Reading a typed name. All of this is pure string work."""
 
-from botany.names import (
+from workers.botany.names import (
     fold,
     merge_key,
     parse_name,

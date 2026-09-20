@@ -103,7 +103,9 @@ Configuration is `MOH_`-prefixed, shared with the API (`api/app/settings.py`):
 
 ## Mounting the route
 
-`workers/` is not on the API image's path today, so `POST /taxon/resolve` is
-built, tested and ready but not yet served. Landing it is three one-line changes
-in three other workstreams' files — see the pull request; rule 2 keeps D out of
-all three.
+`POST /taxon/resolve` is built and tested but not yet served. The API image now
+carries `workers/` on its path (ADR 0011), so what remains is one line in
+`api/app/main.py` mounting `botany.router`, and striking the route's entry from
+`NOT_YET_IMPLEMENTED` in `tests/contract/test_api_matches_spec.py`. Both land
+together — either alone turns the contract job red — and Workstream A is doing
+them in one commit.

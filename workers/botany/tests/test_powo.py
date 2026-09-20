@@ -1,7 +1,7 @@
 """POWO parsing. See mocks/recorded/PROVENANCE.md for where these payloads came from."""
 
-from botany.connectors.powo import parse_search, parse_taxon, powo_id, taxon_url
-from botany.names import parse_name
+from workers.botany.connectors.powo import parse_search, parse_taxon, powo_id, taxon_url
+from workers.botany.names import parse_name
 
 
 def test_an_accepted_name_carries_its_ipni_identifier(payload):
