@@ -1,19 +1,27 @@
-/* Design tokens — Workstream I, S0 deliverable.
+/* Design tokens — Workstream I, S0 deliverable, extended in S1.
  *
  * Two themes: `parchment` (light) and `greenhouse` (dark). Every colour pair
  * used for text on a surface meets WCAG AA at body size; the checks live in
  * web/src/lib/ui/contrast.test.ts so a token change cannot silently break it.
  *
  * Display faces are for headings only (ADR 0005). Body text is a readable serif.
+ *
+ * The theme selectors are plain attribute selectors rather than `:root[…]` so a
+ * subtree can carry its own theme — that is what lets the component gallery
+ * show both themes side by side on one page.
  */
 
 :root,
-:root[data-theme='parchment'] {
+[data-theme='parchment'] {
   /* surfaces */
   --moh-surface: #f4ecd8;
   --moh-surface-raised: #fbf6e9;
   --moh-surface-sunken: #e7dcc2;
-  --moh-border: #947f50;
+  --moh-field: #fbf6e9;
+  --moh-selected: #e6ecdd;
+  --moh-skeleton: #e2d7bc;
+  --moh-scrim: rgb(42 33 24 / 0.55);
+  --moh-border: #877241;
 
   /* ink */
   --moh-ink: #2a2118;
@@ -24,6 +32,11 @@
   --moh-accent: #2f4a36;
   --moh-accent-hover: #3d6146;
   --moh-accent-ink: #f7f2e4;
+
+  /* destructive actions — uprooting, discarding, deleting */
+  --moh-danger: #8a2f2f;
+  --moh-danger-hover: #722626;
+  --moh-danger-ink: #f7f2e4;
 
   /* status — each has a plain meaning attached in copy, never colour alone */
   --moh-parched: #8a4b1e; /* needs water */
@@ -59,14 +72,24 @@
   --moh-radius-lg: 12px;
   --moh-shadow: 0 1px 2px rgb(42 33 24 / 0.12), 0 4px 12px rgb(42 33 24 / 0.08);
 
+  /* whimsy at moments only; both are disabled under prefers-reduced-motion */
+  --moh-motion-quick: 140ms;
+  --moh-motion-sheet: 240ms;
+
   /* a touch target never smaller than this; the app is used outdoors, one-handed */
   --moh-tap: 44px;
+  /* a list row is sized for a thumb, not a cursor */
+  --moh-row: 56px;
 }
 
-:root[data-theme='greenhouse'] {
+[data-theme='greenhouse'] {
   --moh-surface: #141a15;
   --moh-surface-raised: #1d261e;
   --moh-surface-sunken: #0d110e;
+  --moh-field: #0d110e;
+  --moh-selected: #1e2a21;
+  --moh-skeleton: #27322a;
+  --moh-scrim: rgb(5 8 6 / 0.65);
   --moh-border: #647a67;
 
   --moh-ink: #e8e4d6;
@@ -77,6 +100,10 @@
   --moh-accent-hover: #96c6a0;
   --moh-accent-ink: #0d110e;
 
+  --moh-danger: #e08a8a;
+  --moh-danger-hover: #f0a3a3;
+  --moh-danger-ink: #0d110e;
+
   --moh-parched: #d99a63;
   --moh-sated: #7ec5dd;
   --moh-frost: #9dbbe6;
@@ -84,11 +111,17 @@
   --moh-ailing: #e08a8a;
 }
 
+/* The device preference, for anyone who has not chosen a theme in the app.
+ * Kept identical to the greenhouse block above — contrast.test.ts asserts it. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='parchment']) {
     --moh-surface: #141a15;
     --moh-surface-raised: #1d261e;
     --moh-surface-sunken: #0d110e;
+    --moh-field: #0d110e;
+    --moh-selected: #1e2a21;
+    --moh-skeleton: #27322a;
+    --moh-scrim: rgb(5 8 6 / 0.65);
     --moh-border: #647a67;
     --moh-ink: #e8e4d6;
     --moh-ink-muted: #a9a695;
@@ -96,6 +129,9 @@
     --moh-accent: #7fb08a;
     --moh-accent-hover: #96c6a0;
     --moh-accent-ink: #0d110e;
+    --moh-danger: #e08a8a;
+    --moh-danger-hover: #f0a3a3;
+    --moh-danger-ink: #0d110e;
     --moh-parched: #d99a63;
     --moh-sated: #7ec5dd;
     --moh-frost: #9dbbe6;
