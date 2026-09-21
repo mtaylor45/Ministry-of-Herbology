@@ -278,14 +278,15 @@ S4; v1.0 ships at the end of S10.
 
 ## Open decisions
 
-These need answers before the sprint that depends on them. Tracked in
-`docs/adr/0006-open-decisions.md`.
+All five are now answered; ADR 0006 records the trail. Decisions taken since are
+ADRs 0011–0016.
 
 - ~~Paid APIs acceptable?~~ **Answered: free sources only** (ADR 0007).
   Perenual and generated plates stay behind disabled feature flags.
 - ~~Nest route: HA Nest integration (SDM API) or Matter?~~ **Answered: neither.
   Indoor conditions come from Home Assistant** (ADR 0009).
-- Survey format: PDF plat, CAD file, or satellite image only? **Needed by S7.**
+- ~~Survey format: PDF plat, CAD file, or satellite image only?~~ **Answered:
+  raster image plus two-point georeferencing** (ADR 0015).
 - ~~Separate logins per household member, or one shared login with a member
   picker?~~ **Answered: shared login with a member picker** (ADR 0008).
 - ~~Any irrigation hardware to control?~~ **Answered: none today, and no
