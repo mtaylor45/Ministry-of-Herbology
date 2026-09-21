@@ -37,11 +37,16 @@ tapping a pin opens its Specimen page*.
 - Uploads can be large. Downscale for display, keep the original, and never
   block the request on processing.
 
-## Open decision
+## Survey format — settled
 
-Survey format is open decision 3 in `docs/adr/0006-open-decisions.md`. Build
-against the stated default — a raster image plus two-point georeferencing, with
-PDFs rasterised on upload — and note it in your PR.
+ADR 0015: a survey is a **raster image plus at least two pixel↔world calibration
+points**. PNG and JPEG directly; a PDF plat is rasterised on upload and the
+original kept; CAD is out of scope. This is what this brief already assumed, so
+S7 needs no re-plan.
+
+Accuracy is bounded by how carefully those points are placed. Let a user add
+more than two, and say plainly how much error is implied — do not present a
+hand-calibrated overlay as survey-grade.
 
 ## Escalate
 
