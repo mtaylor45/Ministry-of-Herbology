@@ -37,7 +37,7 @@
       {
         "field": "min_temp_c",
         "value": 10.0,
-        "source_id": "01890020-0000-7000-8000-000000000001",
+        "source_id": "01890020-0000-7000-8000-000000000004",
         "confidence": "high",
         "unit": "C"
       },
@@ -125,7 +125,7 @@
       {
         "field": "light_label",
         "value": "full_sun",
-        "source_id": "01890020-0000-7000-8000-000000000001",
+        "source_id": "01890021-0000-7000-8000-000000000010",
         "confidence": "high"
       },
       {
@@ -172,7 +172,7 @@
       {
         "field": "min_temp_c",
         "value": 2.0,
-        "source_id": "01890020-0000-7000-8000-000000000001",
+        "source_id": "01890020-0000-7000-8000-000000000004",
         "confidence": "high",
         "unit": "C"
       },
@@ -185,7 +185,7 @@
       {
         "field": "light_label",
         "value": "full_sun",
-        "source_id": "01890020-0000-7000-8000-000000000003",
+        "source_id": "01890021-0000-7000-8000-000000000011",
         "confidence": "high"
       },
       {
@@ -248,7 +248,7 @@
       {
         "field": "light_label",
         "value": "part_shade",
-        "source_id": "01890020-0000-7000-8000-000000000001",
+        "source_id": "01890021-0000-7000-8000-000000000012",
         "confidence": "high"
       }
     ],
@@ -300,7 +300,7 @@
       {
         "field": "light_label",
         "value": "full_sun",
-        "source_id": "01890020-0000-7000-8000-000000000003",
+        "source_id": "01890021-0000-7000-8000-000000000013",
         "confidence": "high"
       }
     ],
@@ -351,7 +351,7 @@
       {
         "field": "min_temp_c",
         "value": 10.0,
-        "source_id": "01890020-0000-7000-8000-000000000001",
+        "source_id": "01890020-0000-7000-8000-000000000004",
         "confidence": "medium",
         "unit": "C"
       },
@@ -421,7 +421,7 @@
       {
         "field": "light_label",
         "value": "full_sun",
-        "source_id": "01890020-0000-7000-8000-000000000001",
+        "source_id": "01890021-0000-7000-8000-000000000014",
         "confidence": "high"
       }
     ],
@@ -463,14 +463,14 @@
       {
         "field": "min_temp_c",
         "value": -10.0,
-        "source_id": "01890020-0000-7000-8000-000000000001",
+        "source_id": "01890020-0000-7000-8000-000000000004",
         "confidence": "medium",
         "unit": "C"
       },
       {
         "field": "toxic_to_children",
         "value": true,
-        "source_id": "01890020-0000-7000-8000-000000000003",
+        "source_id": "01890021-0000-7000-8000-000000000015",
         "confidence": "high"
       },
       {
@@ -482,7 +482,7 @@
       {
         "field": "light_label",
         "value": "part_sun",
-        "source_id": "01890020-0000-7000-8000-000000000003",
+        "source_id": "01890021-0000-7000-8000-000000000015",
         "confidence": "low"
       }
     ],
