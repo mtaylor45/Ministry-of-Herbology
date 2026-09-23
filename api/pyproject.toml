@@ -36,9 +36,14 @@ dev = [
 [tool.setuptools]
 packages = ["app", "almanac", "grounds", "inventory", "tending"]
 
+# 88, not 100: CI runs `black --check` from the repository root, where black
+# finds no configuration and uses its own default, and the tree has been
+# formatted at 88 since S0. The number matters less than the agreement (ADR 0018).
 [tool.black]
-line-length = 100
+line-length = 88
 
+# Ruff stays at 100 on purpose. Black cannot split a long comment or string
+# literal, so failing the lint on lines black itself will not fix helps nobody.
 [tool.ruff]
 line-length = 100
 target-version = "py311"
