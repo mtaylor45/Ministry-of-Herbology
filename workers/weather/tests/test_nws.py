@@ -210,6 +210,19 @@ def test_the_point_lookup_names_the_zone_the_coordinates_are_actually_in(
     assert fixture("site.json")["nws_zone"] == "INZ050"
 
 
+def test_both_zone_recordings_name_the_county_they_cover(payload):
+    """The fixture discrepancy, as evidence rather than as an assertion.
+
+    NWS titles each zone's alert feed with the county it covers. Recording both
+    zones means nobody has to take this report on trust.
+    """
+    named = payload("nws/alerts__inz050.json")["title"]
+    actual = payload("nws/alerts__inz047.json")["title"]
+    assert "Wayne (INZ050)" in named, "the zone fixtures/site.json names"
+    assert "Marion (INZ047)" in actual, "the zone the coordinates resolve to"
+    assert named != actual
+
+
 def test_a_source_that_is_down_is_reported_not_raised(run):
     from workers.weather.mocks.fetcher import UnavailableFetcher
 

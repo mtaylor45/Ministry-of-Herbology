@@ -19,7 +19,8 @@ keeps a parser bug reproducible a year from now.
 | `forecast__the-grounds.json` | `GET /gridpoints/IND/58,69/forecast` |
 | `forecast-hourly__the-grounds.json` | `GET /gridpoints/IND/58,69/forecast/hourly` |
 | `observation__kind-latest.json` | `GET /stations/KIND/observations/latest` |
-| `alerts__inz050.json` | `GET /alerts/active?zone=INZ050` |
+| `alerts__inz050.json` | `GET /alerts/active?zone=INZ050` (the zone `site.json` names) |
+| `alerts__inz047.json` | `GET /alerts/active?zone=INZ047` (the zone the coordinates resolve to) |
 | `alerts__frost-advisory-active.json` | `GET /alerts/active?event=Frost%20Advisory` |
 
 Two notes on these, both deliberate:
@@ -38,12 +39,16 @@ Two notes on these, both deliberate:
 
 ### A fixture mismatch worth someone's attention
 
-`fixtures/site.json` gives `nws_zone: INZ050`, which NWS resolves to **Wayne
-County**. The site's own coordinates resolve to **INZ047, Marion County** —
-`points__the-grounds.json` says so in `properties.forecastZone`. One of the two
-is wrong, and an advisory fetched for the wrong county is an advisory for
-somebody else's frost. Fixtures belong to L and A, so this is flagged rather
-than fixed: see the pull request for S3 (E).
+`fixtures/site.json` gives `nws_zone: INZ050`. NWS titles that zone's alert
+feed *"Current watches, warnings, and advisories for **Wayne** (INZ050) IN"*,
+while the same call for the zone the site's own coordinates resolve to is
+titled *"… for **Marion** (INZ047) IN"*. `points__the-grounds.json` gives
+`INZ047` in `properties.forecastZone`.
+
+Both payloads are recorded, so the discrepancy is evidence rather than an
+assertion. One of the two is wrong, and an advisory fetched for the wrong
+county is an advisory for somebody else's frost. Fixtures belong to L and A, so
+this is flagged rather than fixed: see the pull request for S3 (E).
 
 ## `open_meteo/`
 
