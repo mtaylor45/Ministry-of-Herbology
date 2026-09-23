@@ -8,6 +8,7 @@
  */
 
 import type { Confidence, FrostAlert, Task } from '$api/client';
+import { ApiError, BASE, get, type Fetcher } from '../../shared/http';
 
 export type { Confidence, FrostAlert, Task };
 
@@ -146,55 +147,10 @@ export interface LogEntry {
   data: Record<string, unknown> | null;
 }
 
-/** A panel's data, or the plain reason it is missing. Never both, never neither.
- *
- *  A facet asks four or five endpoints for its panels. One of them failing must
- *  cost the reader that panel and nothing else — a blank Tending page because
- *  the frost lookahead timed out is worse than a page that says so. */
-export type Fetched<T> = { value: T; error: null } | { value: null; error: string };
-
-export const BASE = '/api/v1';
-
-export type Fetcher = typeof fetch;
-
-export class ApiError extends Error {
-  constructor(
-    readonly path: string,
-    readonly status: number,
-    readonly statusText: string,
-  ) {
-    super(`${status} ${statusText} for ${path}`);
-    this.name = 'ApiError';
-  }
-}
-
-export async function get<T>(path: string, fetcher: Fetcher): Promise<T> {
-  const response = await fetcher(`${BASE}${path}`, { headers: { accept: 'application/json' } });
-  if (!response.ok) throw new ApiError(path, response.status, response.statusText);
-  return (await response.json()) as T;
-}
-
-/** Run a read and keep its failure as a sentence rather than as an exception. */
-export async function settle<T>(work: Promise<T>): Promise<Fetched<T>> {
-  try {
-    return { value: await work, error: null };
-  } catch (cause) {
-    return { value: null, error: reason(cause) };
-  }
-}
-
-/** What went wrong, in words a person reads outdoors rather than a stack trace. */
-export function reason(cause: unknown): string {
-  if (cause instanceof ApiError) {
-    if (cause.status === 404) return 'The greenhouse has no record of this yet.';
-    if (cause.status === 405 || cause.status === 501)
-      return 'The API does not answer this yet — the screen is ready, the endpoint is not.';
-    if (cause.status >= 500) return `The greenhouse answered with an error (${cause.status}).`;
-    return `The greenhouse refused the request (${cause.status}).`;
-  }
-  if (cause instanceof Error) return cause.message;
-  return 'Something went wrong, and it did not say what.';
-}
+/** The transport half lives beside the other screens that make these reads, so
+ *  the Almanac and the facets fail in the same words. Re-exported here because
+ *  this module is still the Specimen page's single import. */
+export { ApiError, BASE, get, reason, settle, type Fetched, type Fetcher } from '../../shared/http';
 
 export const reads = {
   specimen: (id: string, f: Fetcher) => get<SpecimenDetail>(`/specimens/${id}`, f),
