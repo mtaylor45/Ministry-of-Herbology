@@ -64,3 +64,5 @@ problem.
 ## Escalate
 
 Contract changes go to Workstream A as an ADR.
+
+**Visual reference.** `docs/design/style-guide.md` (the Enchanted Academy guide) is the project's style guide, adopted by ADR 0017. Read both before designing any surface: the ADR records where the guide yields to WCAG AA, to the frozen contract and to rule 7, and carries the measured contrast figures for the palette.

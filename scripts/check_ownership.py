@@ -51,7 +51,7 @@ ALWAYS_ALLOWED = (
 )
 
 #: Nobody but A touches these, whatever else their branch says.
-A_ONLY = ("contracts/", "docs/adr/", "CLAUDE.md", "docs/plan/")
+A_ONLY = ("contracts/", "docs/adr/", "CLAUDE.md", "docs/plan/", "docs/design/")
 
 BRANCH_PATTERN = re.compile(r"^ws-([a-l])/", re.IGNORECASE)
 
