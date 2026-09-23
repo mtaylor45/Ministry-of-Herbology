@@ -438,9 +438,11 @@ telescope, botanical specimen.
 Use seals sparingly. A seal should communicate authority, history, membership and
 authenticity rather than simply decoration.
 
-> **Project note.** Rule 7 in `CLAUDE.md` forbids crests and house iconography in the
-> app. ADR 0017 records how far this section applies here; see it before drawing a
-> seal or crest for any surface.
+> **Project note.** One original Ministry seal is permitted (ADR 0017, answering
+> rule 7). It may evoke the genre; it copies no trademarked or copyrighted design —
+> no existing school or house crest or its arrangement, no franchise emblem, sigil
+> or logotype, no fictional institution's name or motto. Read *Seals and crests* in
+> ADR 0017 before drawing anything for any surface; A reviews the mark.
 
 ---
 
@@ -463,8 +465,8 @@ components.
 
 Use heraldic symmetry but avoid copying recognisable existing heraldic arrangements.
 
-> **Project note.** As with section 22 — see ADR 0017 before applying this to the
-> app.
+> **Project note.** As with section 22: heraldic *symmetry* is fine, a recognisable
+> heraldic *arrangement* is not. See *Seals and crests* in ADR 0017.
 
 ---
 

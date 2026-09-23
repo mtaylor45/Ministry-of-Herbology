@@ -4,8 +4,9 @@ Date: 2026-09-23
 
 ## Status
 
-Accepted, with three questions for the maintainer left open in *Open questions*
-below. Those three do not block the adoption; they decide how far it goes.
+Accepted. The three questions this ADR originally left open were answered by the
+maintainer on 2026-09-23 and are recorded in *The three questions, answered* below.
+Rule 7 in `CLAUDE.md` is amended by this ADR as a consequence of the first answer.
 
 ## Context
 
@@ -116,16 +117,29 @@ display stack starts at IM Fell English (one of the guide's own suggestions) and
 falls back through system serifs, and there is no utility sans at all — metadata is
 set in the body serif.
 
-- **Display and body** keep the system-first stacks, with IM Fell English and EB
-  Garamond named first. A self-hosted, subset Cormorant Garamond may be added later
-  if the maintainer accepts the payload; it is not adopted here. This is a PWA that
-  must work offline in a garden with no signal, and a webfont that fails to load is
-  worse than a system serif that never had to.
+- **The display face is self-hosted Cormorant Garamond**, subset to the Latin
+  characters the app actually sets, `woff2`, served from `web/static/fonts/` by the
+  app's own origin. Never a Google Fonts URL: this is a self-hosted app that must
+  work in a garden with no signal, and a third-party font CDN is both an offline
+  failure and a request to someone else's server on every load.
+- Every `@font-face` carries `font-display: swap` and keeps the full system serif
+  stack behind it, so a font that fails to arrive costs a different shape, never a
+  blank heading. The service worker precaches the files; the app is usable before
+  they land.
+- **Body text keeps the system-first serif stack.** The display face is a few dozen
+  headings; body text is every screen, and the system serif is already installed,
+  already hinted for the device, and costs nothing. EB Garamond is named first in
+  the stack for anyone who has it.
 - **The utility sans is adopted** as a new `--moh-font-ui`, as a system stack
   (`system-ui`, `-apple-system`, `Segoe UI`, …) rather than Inter or Source Sans 3
   over the network. §3 wants it for metadata, dates, form labels and system
   messages, and those are exactly the strings currently fighting the serif.
 - Metadata gets §3's treatment: small, uppercase, wide tracking.
+- **Licensing is checked at vendoring time, not assumed.** Cormorant Garamond, EB
+  Garamond and IM Fell English are each distributed under the SIL Open Font
+  Licence; whoever vendors the files confirms that against the release they
+  actually download, and commits the licence text beside the fonts. A font whose
+  licence cannot be confirmed does not ship.
 
 ### Motion
 
@@ -157,12 +171,34 @@ system and are explicit about avoiding recognisable heraldry — the intent matc
 but the literal texts collide.
 
 The reading adopted here: **rule 7 forbids franchise crests, not the concept of a
-mark.** The guide's own prohibitions (no recognisable fictional symbols, no obvious
-franchise references, §27) are strictly narrower than rule 7 and are kept. Pending
-the maintainer's answer in *Open questions*, no crest is drawn and no seal ships.
-The wax-seal motif of §22 is permitted **only** as a decorative flourish carrying no
-institutional identity — a divider ornament, a chapter marker — and never a shield,
-never house colours, never a motto in a dead language chosen to imply one.
+mark.** The maintainer has confirmed it: one original seal is permitted, it may be
+*reminiscent* of the wizarding-academia genre, and it must use no copyrighted or
+trademarked design. Rule 7's wording is amended to say so.
+
+The genre is not the property of any rights holder — an oak leaf, a lantern, a
+circular inscription and a wax seal are centuries older than any film. Specific
+marks are. So the boundary this project works to:
+
+**Permitted** — original geometry built from the guide's §22 motifs: a lantern, an
+oak or laurel leaf, a compass, a moon phase, a quill, a key, a seed head, a
+botanical specimen; a circular inscription in the app's own words; a wax-seal
+silhouette; period-appropriate engraving and heraldic *symmetry*.
+
+**Never** — any existing school, house or institutional crest or its arrangement;
+any franchise's emblem, sigil, monogram or logotype; the name or initials of a
+fictional institution or its founders; house names, house animals, house colours as
+a set, or a four-part shield that stands in for them; a motto lifted from, or
+composed to evoke, a specific fictional one; any film or game typeface; any mark
+close enough that someone would recognise *which* story it came from.
+
+The test is simple and it is the one to apply when drawing: a reader should think
+"an old botanical institution", never "that's from —". If a motif only reads as
+magical *because* it quotes something, it fails.
+
+The seal is one mark, used sparingly per §22 — app icon, splash screen, printed
+labels, the Journal's colophon — and it carries authority and authenticity rather
+than decoration. It is drawn as original vector work, not generated, so its
+provenance is known.
 
 ### Illustration and the Journal
 
@@ -176,16 +212,32 @@ citation supports.
 
 ## Consequences
 
-**Workstream I** re-pigments `tokens.css` onto the table above, adds
-`--moh-font-ui`, `--moh-gold-line`, `--moh-gold-ink`, `--moh-sage`, the two shadow
-tokens and the motion curve, and extends `contrast.test.ts` to cover every new pair
-— including the two that must be asserted as *decoration only*. This is the largest
-single change to the design system since S0 and is S4 work, not S3: it lands after
-E's Almanac endpoints, and it is sequenced before J builds `/register`, `/grounds`,
-`/almanac` and `/office` so those screens are built once.
+**Workstream I** carries most of this, as S4 work rather than S3 — it lands after
+E's Almanac endpoints and is sequenced before J builds `/register`, `/grounds`,
+`/almanac` and `/office`, so those screens are built once:
+
+- re-pigment `tokens.css` onto the table above; add `--moh-font-ui`,
+  `--moh-gold-line`, `--moh-gold-ink`, `--moh-sage`, the two shadow tokens and the
+  motion curve;
+- extend `contrast.test.ts` to every new pair, including the two that must be
+  asserted as *decoration only* — a gold hairline may never be the sole indicator of
+  focus or state on a light surface, and the test is where that is enforced;
+- vendor the subset Cormorant Garamond `woff2` into `web/static/fonts/` with its
+  licence text, wire the `@font-face` with `font-display: swap`, and add the files
+  to the service worker's precache;
+- make `parchment` the default: delete the `@media (prefers-color-scheme: dark)`
+  block, and adjust the `contrast.test.ts` assertion that currently requires that
+  block to match `greenhouse` token for token — that test exists and will fail
+  otherwise;
+- draw the seal as original vector work within the boundary in *Seals and crests*,
+  and use it for the app icon and splash screen.
+
+This is the largest single change to the design system since S0. The seal in
+particular is a judgement call about someone else's intellectual property: when a
+motif is arguable, it does not ship, and A reviews the mark before it lands.
 
 **Workstream K** adopts §30 for the fallback plate prompt and §9 for the style
-guide it already maintains.
+guide it already maintains, and may use the seal in the Journal's colophon.
 
 **Workstream J** builds the four unbuilt routes against the new tokens, not the old
 ones.
@@ -199,22 +251,28 @@ constraint, not a style choice.
 The mockup at `https://claude.ai/artifact/S8o83sphAMe61NkSqmZW7c` now shows the
 *previous* palette. It is a record of the 21 September state and is not retrofitted.
 
-## Open questions for the maintainer
+## The three questions, answered
 
-1. **An original seal — yes or no?** The guide devotes two sections to one; rule 7's
-   text forbids crests outright. If yes, rule 7's wording is amended by a follow-up
-   ADR to "no franchise crests or house iconography", and one mark is drawn from
-   original geometry (a lantern, an oak leaf, a compass) for the app icon, the
-   splash screen and printed labels. If no, rule 7 stands unchanged and §§22–23
-   apply to print only.
-2. **Downloaded display font?** Self-hosting a subset Cormorant Garamond costs
-   roughly 30–60 KB and gives the guide's exact display voice; the system stack
-   costs nothing and is already installed on most devices. Offline-first argues for
-   the system stack.
-3. **Which theme is the default for a first-time visitor?** The guide implies
-   midnight. The app's most-used screen is used outdoors in daylight. Current
-   behaviour — follow the device preference, remember the choice — is the
-   recommendation, and it means neither theme is privileged.
+Answered by the maintainer, 2026-09-23.
+
+1. **An original seal is permitted.** It may be reminiscent of wizarding-academia
+   design, and must use no copyrighted or trademarked design. Rule 7 in `CLAUDE.md`
+   is amended by this ADR from a blanket "no crests" to "no franchise crests, house
+   iconography or other franchise IP; one original Ministry seal is permitted". The
+   permitted/never boundary is in *Seals and crests* above and is the operative
+   text — a designer reads that section, not this line.
+2. **A self-hosted display font is approved.** Cormorant Garamond, subset, `woff2`,
+   served from the app's own origin with the system stack behind it. Details in
+   *Typography* above.
+3. **Light is the default theme.** A first-time visitor gets `parchment`,
+   whatever their device's `prefers-color-scheme` says. This is a change in
+   behaviour, not only in wording: the current `@media (prefers-color-scheme: dark)`
+   block in `tokens.css` silently hands a dark-mode phone the dark theme, and that
+   block goes. Dark remains one tap away in the theme switcher and the choice is
+   remembered. Stated plainly because it has a cost: someone who keeps their phone
+   in dark mode for comfort now gets a light app until they change it. If that turns
+   out to be the wrong trade, restoring device-following is a one-block change and a
+   superseding ADR.
 
 ## References
 
