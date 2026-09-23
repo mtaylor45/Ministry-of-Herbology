@@ -117,6 +117,11 @@ def parse_latest_observation(payload: Any) -> tuple[Observation, ...]:
             time=moment,
             temperature_c=measurement(properties.get("temperature")),
             humidity_pct=measurement(properties.get("relativeHumidity")),
+            # Only the one-hour total. NWS also publishes
+            # ``precipitationLast3Hours`` and ``…6Hours``, and reading either
+            # into an hourly row would count the same rain three or six times
+            # once ``weather_daily`` sums the bucket. A station that reports
+            # neither leaves this None, which is "unmeasured", not "dry".
             precip_mm=measurement(properties.get("precipitationLastHour")),
             # NWS publishes no ET₀ — see the module docstring, and ADR 0016.
             et0_mm=None,
@@ -225,7 +230,8 @@ def parse_alerts(payload: Any) -> tuple[Advisory, ...]:
                 severity=_text(properties.get("severity")),
                 onset=parse_time(properties.get("onset"))
                 or parse_time(properties.get("effective")),
-                expires=parse_time(properties.get("expires")) or parse_time(properties.get("ends")),
+                expires=parse_time(properties.get("expires"))
+                or parse_time(properties.get("ends")),
                 headline=_text(properties.get("headline")),
                 description=_text(properties.get("description")),
             )
@@ -242,7 +248,9 @@ class NwsSource:
 
     source = NWS
 
-    def __init__(self, fetcher: Fetcher, *, base_url: str = "https://api.weather.gov") -> None:
+    def __init__(
+        self, fetcher: Fetcher, *, base_url: str = "https://api.weather.gov"
+    ) -> None:
         self.fetcher = fetcher
         self.base_url = base_url.rstrip("/")
 
@@ -272,7 +280,9 @@ class NwsSource:
             return SourceResult(source=self.source, error=str(exc))
         return SourceResult(
             source=self.source,
-            forecasts=parse_period_forecast(result.payload, issued_at=result.retrieved_at),
+            forecasts=parse_period_forecast(
+                result.payload, issued_at=result.retrieved_at
+            ),
             is_mock=result.is_mock,
         )
 
@@ -310,7 +320,11 @@ class NwsSource:
 
 
 def _last_segment(url: Any) -> str | None:
-    return str(url).rstrip("/").rsplit("/", 1)[-1] if isinstance(url, str) and url else None
+    return (
+        str(url).rstrip("/").rsplit("/", 1)[-1]
+        if isinstance(url, str) and url
+        else None
+    )
 
 
 def utc_now() -> datetime:

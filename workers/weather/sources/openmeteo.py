@@ -163,7 +163,9 @@ def parse_daily_forecast(
                 temp_min_c=as_float(_at(columns["temperature_2m_min"], index)),
                 temp_max_c=as_float(_at(columns["temperature_2m_max"], index)),
                 precip_mm=as_float(_at(columns["precipitation_sum"], index)),
-                precip_prob_pct=as_float(_at(columns["precipitation_probability_max"], index)),
+                precip_prob_pct=as_float(
+                    _at(columns["precipitation_probability_max"], index)
+                ),
                 et0_mm=as_float(_at(columns["et0_fao_evapotranspiration"], index)),
                 wind_kph=as_float(_at(columns["wind_speed_10m_max"], index)),
                 condition=condition_from_wmo(_at(columns["weather_code"], index)),
@@ -198,7 +200,9 @@ def parse_hourly_forecast(
                 horizon="hourly",
                 temperature_c=as_float(_at(columns["temperature_2m"], index)),
                 precip_mm=as_float(_at(columns["precipitation"], index)),
-                precip_prob_pct=as_float(_at(columns["precipitation_probability"], index)),
+                precip_prob_pct=as_float(
+                    _at(columns["precipitation_probability"], index)
+                ),
                 et0_mm=as_float(_at(columns["et0_fao_evapotranspiration"], index)),
                 wind_kph=as_float(_at(columns["wind_speed_10m"], index)),
                 condition=condition_from_wmo(_at(columns["weather_code"], index)),
@@ -244,7 +248,9 @@ class OpenMeteoSource:
             "daily": ",".join(DAILY_VARIABLES),
         }
         try:
-            result = await self.fetcher.get_json("open_meteo", self.forecast_url, params)
+            result = await self.fetcher.get_json(
+                "open_meteo", self.forecast_url, params
+            )
         except SourceUnavailable as exc:
             return SourceResult(source=self.source, error=str(exc))
 
@@ -266,13 +272,17 @@ class OpenMeteoSource:
             "hourly": ",".join(HOURLY_VARIABLES),
         }
         try:
-            result = await self.fetcher.get_json("open_meteo", self.forecast_url, params)
+            result = await self.fetcher.get_json(
+                "open_meteo", self.forecast_url, params
+            )
         except SourceUnavailable as exc:
             return SourceResult(source=self.source, error=str(exc))
 
         return SourceResult(
             source=self.source,
-            observations=parse_hourly_observations(result.payload, before=result.retrieved_at),
+            observations=parse_hourly_observations(
+                result.payload, before=result.retrieved_at
+            ),
             is_mock=result.is_mock,
         )
 

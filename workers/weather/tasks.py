@@ -675,7 +675,9 @@ async def ingest_observations(ctx: dict, site_id: str | None = None) -> dict[str
     return report.to_dict()
 
 
-async def ingest_history(ctx: dict, site_id: str | None = None, days: int = 30) -> dict[str, Any]:
+async def ingest_history(
+    ctx: dict, site_id: str | None = None, days: int = 30
+) -> dict[str, Any]:
     """Backfill ``weather_obs`` from the archive, then refresh the rollups.
 
     Run once when a site is added and nightly after that. The scheduled
@@ -710,7 +712,9 @@ async def ingest_advisories(ctx: dict, site_id: str | None = None) -> dict[str, 
     }
 
 
-async def evaluate_water_balance(ctx: dict, day: date | str | None = None) -> dict[str, Any]:
+async def evaluate_water_balance(
+    ctx: dict, day: date | str | None = None
+) -> dict[str, Any]:
     """Advance every outdoor specimen's deficit and write ``water_balance``.
 
     Indoor specimens are skipped: they use interval rules, not this engine.

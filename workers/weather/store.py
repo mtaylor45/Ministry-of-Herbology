@@ -75,7 +75,9 @@ def delete_observations_sql(site_id: str, start: datetime, end: datetime) -> Sta
     )
 
 
-def insert_observations_sql(site_id: str, observations: Sequence[Observation]) -> Statement:
+def insert_observations_sql(
+    site_id: str, observations: Sequence[Observation]
+) -> Statement:
     """One multi-row INSERT. The rows are already one-per-hour by construction."""
     columns = (
         "time",
@@ -95,7 +97,8 @@ def insert_observations_sql(site_id: str, observations: Sequence[Observation]) -
     for index, observation in enumerate(observations):
         row = observation.to_row(site_id)
         placeholders = ", ".join(
-            f"${index * len(columns) + position + 1}" for position in range(len(columns))
+            f"${index * len(columns) + position + 1}"
+            for position in range(len(columns))
         )
         tuples.append(f"({placeholders})")
         values.extend(row[column] for column in columns)
@@ -351,7 +354,9 @@ async def write_advisories(
     return len(advisories)
 
 
-async def write_water_balance(connection: Connection, rows: Sequence[dict[str, Any]]) -> int:
+async def write_water_balance(
+    connection: Connection, rows: Sequence[dict[str, Any]]
+) -> int:
     for row in rows:
         sql, params = upsert_water_balance_sql(row)
         await connection.execute(sql, *params)
@@ -359,7 +364,10 @@ async def write_water_balance(connection: Connection, rows: Sequence[dict[str, A
 
 
 async def refresh_aggregates(
-    connection: Connection, start: date, end: date, views: Sequence[str] = ("weather_daily",)
+    connection: Connection,
+    start: date,
+    end: date,
+    views: Sequence[str] = ("weather_daily",),
 ) -> None:
     for view in views:
         sql, params = refresh_aggregate_sql(view, start, end)

@@ -76,7 +76,9 @@ def specimen_contexts(
     settings = settings or get_settings()
     fixtures_dir = settings.fixtures_dir
     species = {row["id"]: row for row in _load(fixtures_dir, "species/species.json")}
-    locations = {row["id"]: row for row in _load(fixtures_dir, "locations/locations.json")}
+    locations = {
+        row["id"]: row for row in _load(fixtures_dir, "locations/locations.json")
+    }
     sources = {row["id"]: row for row in _load(fixtures_dir, "species/sources.json")}
 
     contexts: dict[str, SpecimenContext] = {}

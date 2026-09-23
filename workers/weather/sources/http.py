@@ -96,19 +96,24 @@ class HttpFetcher:
             raise SourceUnavailable(f"{kind}: {last_error}") from last_error
         if response.status_code >= 400:
             raise SourceUnavailable(
-                f"{kind}: HTTP {response.status_code} for {response.url} " f"— {_reason(response)}"
+                f"{kind}: HTTP {response.status_code} for {response.url} "
+                f"— {_reason(response)}"
             )
         try:
             payload = response.json()
         except ValueError as exc:
-            raise SourceUnavailable(f"{kind}: expected JSON from {response.url}") from exc
+            raise SourceUnavailable(
+                f"{kind}: expected JSON from {response.url}"
+            ) from exc
 
         # Open-Meteo answers 200 with ``{"error": true, "reason": ...}`` for
         # some malformed requests, so a status code alone is not consent.
         if isinstance(payload, dict) and payload.get("error"):
             raise SourceUnavailable(f"{kind}: {payload.get('reason', 'refused')}")
 
-        return FetchResult(url=str(response.url), payload=payload, retrieved_at=datetime.now(UTC))
+        return FetchResult(
+            url=str(response.url), payload=payload, retrieved_at=datetime.now(UTC)
+        )
 
 
 def _reason(response: httpx.Response) -> str:

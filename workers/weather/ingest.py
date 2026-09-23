@@ -80,7 +80,9 @@ class IngestReport:
     @property
     def used_fallback(self) -> bool:
         return any(
-            source == NWS for kind, source in self.sources.items() if kind in self.PRIMARY_KINDS
+            source == NWS
+            for kind, source in self.sources.items()
+            if kind in self.PRIMARY_KINDS
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -99,7 +101,9 @@ class IngestReport:
 class WeatherIngest:
     """Open-Meteo first, NWS second, and a report either way."""
 
-    def __init__(self, fetcher: Fetcher, settings: WeatherSettings | None = None) -> None:
+    def __init__(
+        self, fetcher: Fetcher, settings: WeatherSettings | None = None
+    ) -> None:
         self.settings = settings or get_settings()
         self.fetcher = fetcher
         self.open_meteo = OpenMeteoSource(
@@ -195,10 +199,14 @@ class WeatherIngest:
     async def advisories(self, site: Site) -> IngestReport:
         """NWS only. Nobody else publishes them, so there is no fallback."""
         if not site.nws_zone:
-            return IngestReport(site_id=site.id, errors=("nws: the site names no zone",))
+            return IngestReport(
+                site_id=site.id, errors=("nws: the site names no zone",)
+            )
         result = await self.nws.fetch_advisories(site.nws_zone)
         if not result.ok:
-            return IngestReport(site_id=site.id, errors=(result.error or "nws: refused",))
+            return IngestReport(
+                site_id=site.id, errors=(result.error or "nws: refused",)
+            )
         return IngestReport(
             site_id=site.id,
             advisories=result.advisories,

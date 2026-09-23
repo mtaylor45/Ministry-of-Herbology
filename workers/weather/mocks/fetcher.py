@@ -86,7 +86,9 @@ class RecordedFetcher:
     def baseline(self) -> dict[str, Any]:
         if self._baseline is None:
             path = self.settings.fixtures_dir / "weather" / "baseline_30d.json"
-            self._baseline = json.loads(path.read_text()) if path.exists() else {"days": []}
+            self._baseline = (
+                json.loads(path.read_text()) if path.exists() else {"days": []}
+            )
         return self._baseline
 
     async def get_json(
@@ -110,7 +112,11 @@ class RecordedFetcher:
             if "/alerts/active" in url:
                 return FetchResult(
                     url=url,
-                    payload={"type": "FeatureCollection", "features": [], **_synthetic()},
+                    payload={
+                        "type": "FeatureCollection",
+                        "features": [],
+                        **_synthetic(),
+                    },
                     retrieved_at=RECORDED_ON,
                     is_mock=True,
                 )
@@ -289,16 +295,22 @@ def _hourly_block(days: list[dict[str, Any]]) -> dict[str, list[Any]]:
             block["temperature_2m"].append(
                 round(_diurnal_temperature(day["tmin_c"], day["tmax_c"], hour), 1)
             )
-            block["relative_humidity_2m"].append(round(_humidity(day["condition"], hour), 1))
+            block["relative_humidity_2m"].append(
+                round(_humidity(day["condition"], hour), 1)
+            )
             block["precipitation"].append(
-                round(day["precip_mm"] / len(rain_hours), 2) if hour in rain_hours else 0.0
+                round(day["precip_mm"] / len(rain_hours), 2)
+                if hour in rain_hours
+                else 0.0
             )
             block["precipitation_probability"].append(80 if day["precip_mm"] else 10)
             # On a wet day only the wet hours carry the wet code; the rest
             # of the day was cloudy, not raining for 24 hours.
             wet_day = code >= 51
             block["weather_code"].append(
-                code if (not wet_day or hour in rain_hours) else _WMO_FOR_CONDITION["cloudy"]
+                code
+                if (not wet_day or hour in rain_hours)
+                else _WMO_FOR_CONDITION["cloudy"]
             )
             block["cloud_cover"].append(_cloud_pct(day["condition"]))
             block["wind_speed_10m"].append(12.0)

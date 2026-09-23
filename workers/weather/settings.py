@@ -35,7 +35,9 @@ DEFAULT_USER_AGENT = (
 
 
 class WeatherSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MOH_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="MOH_", env_file=".env", extra="ignore"
+    )
 
     #: With no network (or no database) the worker answers from the recordings
     #: and the frozen fixtures, so the whole stack runs offline (ADR 0003).

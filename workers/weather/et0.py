@@ -119,7 +119,9 @@ def extraterrestrial_radiation_mm(latitude_deg: float, day_of_year: int) -> floa
     return max(0.0, radiation) * MJ_TO_MM
 
 
-def hargreaves_et0_mm(day: date, tmin_c: float, tmax_c: float, latitude_deg: float) -> float:
+def hargreaves_et0_mm(
+    day: date, tmin_c: float, tmax_c: float, latitude_deg: float
+) -> float:
     """FAO-56 eq. 52: ``ET₀ = 0.0023 · Ra · (Tmean + 17.8) · √(Tmax − Tmin)``.
 
     The single seam for ADR 0016's ``climate_indices``; see the module note.
