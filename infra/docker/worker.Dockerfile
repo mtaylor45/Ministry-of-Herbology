@@ -18,8 +18,14 @@ COPY fixtures/ /srv/fixtures/
 RUN pip install --no-cache-dir /srv/api
 
 ENV PYTHONPATH=/srv/api:/srv
+
+# Secrets arrive as files and are read in the moment before exec (ADR 0019 §3).
+COPY infra/docker/entrypoint.sh /usr/local/bin/moh-entrypoint
+RUN chmod 0555 /usr/local/bin/moh-entrypoint
+
 USER herbology
 
 # WORKER_MODULE picks the workstream: workers.weather.tasks, workers.botany.tasks, …
 ENV WORKER_MODULE=workers.weather.tasks
+ENTRYPOINT ["/usr/local/bin/moh-entrypoint"]
 CMD ["sh", "-c", "arq ${WORKER_MODULE}.WorkerSettings"]

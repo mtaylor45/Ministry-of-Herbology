@@ -18,6 +18,8 @@ web/.vite/
 !.env.example
 data/
 uploads/
+# Database dumps. scripts/backup.sh writes here by default.
+backups/
 
 # Editors and OS
 .DS_Store
