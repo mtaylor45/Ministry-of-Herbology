@@ -42,6 +42,8 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
 
+from workers.runtime import ArqBootstrap
+
 from .et0 import Et0Day, resolve_et0
 from .quality import (
     Assessment,
@@ -833,7 +835,7 @@ def _ingest_for(ctx: dict, site_id: str | None) -> tuple[Any, Any]:
     return ingest, site
 
 
-class WorkerSettings:
+class WorkerSettings(metaclass=ArqBootstrap):
     """Arq entrypoint.
 
     The schedules follow the sprint's exit criterion — readings stored every

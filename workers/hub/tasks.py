@@ -44,6 +44,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
+from workers.runtime import ArqBootstrap
+
 from .entities import SOIL_METRICS, SUPPORTED_METRICS  # noqa: F401  (ADR 0010)
 from .health import IntegrationHealth, SourceHealth, health_report, redact
 from .mapping import SensorSource, pollable, validation_errors
@@ -413,7 +415,7 @@ def _report(
     }
 
 
-class WorkerSettings:
+class WorkerSettings(metaclass=ArqBootstrap):
     """Arq entrypoint.
 
     The schedules follow the sprint's exit criterion — indoor readings stored
