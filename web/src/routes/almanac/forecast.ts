@@ -27,11 +27,15 @@ export const FROST_MARGIN_C = (3 * 5) / 9;
  * looking at. Which plants are actually at risk is a different question — it
  * needs each species' minimum temperature and whether the plant is in a pot or
  * in the ground — and it is answered by `GET /almanac/frost`, which this screen
- * deliberately does not call yet: that response is about to gain an envelope
- * (`{alerts, unassessable}`) so a plant that cannot be judged stops being
- * invisible, and building on the bare list now would mean rewriting this in a
- * fortnight. When the envelope lands, the per-plant alerts belong beside these
- * nights, and `unassessable` belongs beside them too.
+ * deliberately does not call.
+ *
+ * ADR 0018 §2 turns that response from a bare `FrostAlert[]` into a
+ * `FrostReport` — `{alerts, unassessable}` — so a plant the guard *cannot* judge
+ * stops being invisible, and says the change is made now "precisely because it
+ * is still free: J has not built the Almanac screen yet". It is still free:
+ * nothing here reads that endpoint. When the envelope lands, the per-plant
+ * alerts belong on this card beside these nights, and `unassessable` belongs
+ * beside them.
  */
 export type FrostRisk = 'frost' | 'near' | null;
 
@@ -286,13 +290,26 @@ export function formatProbability(value: number | null | undefined): string | nu
   return isNumber(value) ? `${Math.round(value)}% chance` : null;
 }
 
+/** Rain, and how likely it is — phrased so that neither half contradicts the
+ *  other. "Rain none, 10% chance" reads as a 10% chance of no rain, which is
+ *  the opposite of what the forecast means. */
+export function rainSentence(row: {
+  precipMm: number | null;
+  precipProbPct: number | null;
+}): string {
+  const chance = formatProbability(row.precipProbPct);
+  if (!isNumber(row.precipMm)) return 'Rain not forecast';
+  if (row.precipMm === 0) return chance ? `No rain, ${chance} of any` : 'No rain';
+  return chance ? `Rain ${round1(row.precipMm)} mm, ${chance}` : `Rain ${round1(row.precipMm)} mm`;
+}
+
 /** The sentence read aloud for one day of the strip, so the row means the same
  *  thing to a screen reader as the bar does to an eye. */
 export function daySentence(row: DailyRow): string {
   const parts = [
     `${row.label}: high ${formatTemp(row.high)}, low ${formatTemp(row.low)}`,
     row.condition ? row.condition.plain : null,
-    `rain ${formatPrecip(row.precipMm)}`,
+    rainSentence(row).toLowerCase(),
     row.frost ? FROST_NOTE[row.frost].plain : null,
   ];
   return `${parts.filter(Boolean).join('. ')}.`;

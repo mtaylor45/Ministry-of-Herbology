@@ -65,10 +65,10 @@
   <p class="silent">
     <span class="glyph" aria-hidden="true"><Icon name="warning" size={18} /></span>
     <span>
-      {what} does not yet report how sure it is. The engine behind it tracks that — a locally computed
-      evaporation figure, a stale ingest, a forecast standing in for an observation all lower its confidence
-      — but the forecast and history endpoints do not carry those fields yet, so nothing on this screen
-      should be read as a clean bill of health. Requested of Workstream A in this sprint's pull request.
+      {what} does not say how sure it is. A stale ingest or a locally computed evaporation figure lowers
+      what the engine behind it is worth, and ADR 0018 requires that to be declared on the water balance
+      and the frost guard — but not on these two endpoints, which carry nothing of the sort. Read nothing
+      here as a clean bill of health. Asked of Workstream A this sprint.
     </span>
   </p>
 {/if}

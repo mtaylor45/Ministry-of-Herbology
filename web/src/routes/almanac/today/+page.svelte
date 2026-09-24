@@ -129,8 +129,8 @@
              whatever range the library invents for a flat line. The sentence
              says the same thing and says it in one glance. -->
         <p class="none">
-          No rain is forecast today, so nothing waters itself. Anything due for watering is
-          due from you.
+          No rain is forecast today, so nothing waters itself. Anything due for watering is due from
+          you.
         </p>
       {/if}
     </Card>

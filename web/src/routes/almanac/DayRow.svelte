@@ -8,7 +8,7 @@
    *  announce the same figures a second time.
    */
   import Icon from '$ui/Icon.svelte';
-  import { FROST_NOTE, formatPrecip, formatProbability, formatTemp, rangeBar } from './forecast';
+  import { FROST_NOTE, formatTemp, rainSentence, rangeBar } from './forecast';
   import type { DailyRow } from './forecast';
 
   let {
@@ -24,7 +24,6 @@
   } = $props();
 
   const bar = $derived(rangeBar(row, domain));
-  const probability = $derived(formatProbability(row.precipProbPct));
 </script>
 
 <div class="day" data-frost={row.frost ?? undefined}>
@@ -59,7 +58,7 @@
 
   <p class="rain">
     <span class="glyph" aria-hidden="true"><Icon name="rain" size={16} /></span>
-    Rain {formatPrecip(row.precipMm)}{probability ? `, ${probability}` : ''}
+    {rainSentence(row)}
   </p>
 
   {#if row.frost}

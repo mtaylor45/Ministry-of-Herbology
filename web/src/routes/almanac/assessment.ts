@@ -60,9 +60,10 @@ export function capSentence(degradation: Degradation): string {
 /**
  * Does this payload report its own confidence at all?
  *
- * **The seam.** `/almanac/water-balance` and `/almanac/frost` carry the
- * assessment block; `/almanac/forecast` and `/almanac/history` do not carry it
- * yet (E's S3 notes, "For A", item 1). A screen that shows nothing in that case
+ * **The seam.** ADR 0018 requires the assessment block on `WaterBalance` and
+ * `FrostAlert`. `/almanac/forecast` and `/almanac/history` — the two endpoints
+ * these screens read — are not covered by it and carry nothing. A screen that
+ * shows nothing in that case
  * is a screen claiming the forecast is clean, which is the exact failure the
  * engine's confidence arithmetic was built to prevent — so when the block is
  * absent the Almanac says so once, plainly, instead of showing a reassuring

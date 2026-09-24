@@ -77,9 +77,9 @@
         <p class="seam">
           These are the nights, not the plants. Which specimens need carrying in or covering depends
           on each one's own minimum temperature and whether it stands in a pot or in the ground —
-          that is the frost guard's answer, and it is not read here yet: the frost endpoint is about
-          to gain an envelope so the plants it <em>cannot</em> judge are reported beside the ones it can.
-          When it lands, those alerts belong on this card.
+          that is the frost guard's answer, and it is not read here yet. Under ADR 0018 the frost
+          endpoint gains an envelope so the plants it <em>cannot</em> judge are reported beside the ones
+          it can; when that lands, both belong on this card.
         </p>
       </Card>
     {/if}

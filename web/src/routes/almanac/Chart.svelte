@@ -80,7 +80,10 @@
          *  container that sizes to its content grows by a few pixels on every
          *  observation until it is wider than the phone. */
         const widthOf = () =>
-          Math.max(120, Math.round(element.clientWidth || element.parentElement?.clientWidth || 320));
+          Math.max(
+            120,
+            Math.round(element.clientWidth || element.parentElement?.clientWidth || 320),
+          );
 
         const draw = () => {
           plot?.destroy();
