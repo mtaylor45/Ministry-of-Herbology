@@ -1,0 +1,263 @@
+"""Shared setup for the scenario suite. Owner: Workstream L.
+
+These tests drive the *app*. Nothing here reaches into an engine: every fact a
+test asserts arrives through an HTTP response, because the S5 exit criterion is
+about what a person sees, and a suite that called ``run_balance`` directly
+could be green while every screen in the app was wrong.
+
+The engines have their own unit tests — ``tests/engines/`` here and
+``workers/weather/tests/`` in Workstream E's directory. This suite deliberately
+duplicates none of that arithmetic.
+
+Everything runs in mock mode with no database and no network, so the suite is
+the same on a laptop and in CI.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import socket
+from collections.abc import Iterator
+from datetime import date, timedelta
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: ADR 0004's four levels, best to worst — the order this suite compares in.
+CONFIDENCE_ORDER = ("high", "medium", "low", "unknown")
+
+#: The household's single member (ADR 0008: one shared login, a member picker).
+KEEPER_ID = "01890050-0000-7000-8000-000000000001"
+
+# The cast, by the ids the frozen fixtures give them. Named here rather than
+# inline so a test reads as a sentence about a plant instead of a uuid.
+MONSTERA_IN_THE_STUDY = "01890040-0000-7000-8000-000000000001"  # indoor
+MANDRAKE_IN_THE_GREENHOUSE = "01890040-0000-7000-8000-000000000009"  # indoor, dormant
+LEMON_ON_THE_TERRACE = "01890040-0000-7000-8000-000000000004"  # outdoor, open sky
+LEMON_ON_THE_PORCH = "01890040-0000-7000-8000-000000000005"  # outdoor, covered
+LAVENDER_HEDGE = "01890040-0000-7000-8000-000000000006"  # outdoor, in ground
+ROSE_IN_THE_BORDER = "01890040-0000-7000-8000-000000000007"  # outdoor, in ground
+BASIL_ON_THE_TERRACE = "01890040-0000-7000-8000-000000000010"  # outdoor, open sky
+LAVENDER_ON_THE_PORCH = "01890040-0000-7000-8000-000000000011"  # outdoor, covered
+
+
+def confidence_rank(value: str | None) -> int:
+    """How far down ADR 0004's ladder a claim sits. Bigger is less certain."""
+    if value not in CONFIDENCE_ORDER:
+        return len(CONFIDENCE_ORDER) - 1
+    return CONFIDENCE_ORDER.index(value)
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail any test that opens a socket.
+
+    Mirrors Workstream G's suite. A scenario test that quietly started asking
+    Open-Meteo for today's weather would pass on a good day and fail on a bad
+    one, and would stop being a scenario test the moment it did.
+    """
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise AssertionError(
+            "The scenario suite is network-free: a test tried to open a "
+            "socket. Drive the app through its HTTP surface on fixtures."
+        )
+
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+
+
+@pytest.fixture
+def client() -> Iterator[Any]:
+    """A mock-mode client whose in-memory schedule starts from the fixtures.
+
+    The store is process-wide so a completion outlives its request; resetting it
+    around every test keeps one scenario's completions out of the next one's
+    rounds.
+    """
+    from app.main import app
+    from fastapi.testclient import TestClient
+    from tending.fixture_repository import reset_fixture_repository
+
+    reset_fixture_repository()
+    with TestClient(app) as test_client:
+        yield test_client
+    reset_fixture_repository()
+
+
+# --------------------------------------------------------------- the fixtures
+
+
+def load_fixture(relative: str) -> Any:
+    return json.loads((REPO_ROOT / "fixtures" / relative).read_text())
+
+
+@pytest.fixture(scope="session")
+def baseline_days() -> list[dict[str, Any]]:
+    return load_fixture("weather/baseline_30d.json")["days"]
+
+
+@pytest.fixture(scope="session")
+def weather_last_day(baseline_days: list[dict[str, Any]]) -> str:
+    """The newest day the shipped weather actually covers.
+
+    Read from the fixture rather than written down, so that extending or
+    trimming the baseline moves the suite with it instead of breaking it. A
+    round asked for on this day is "the morning after", with a balance that is
+    current; a round asked for on any later day is working from stale weather
+    and must say so — which is what
+    ``test_certainty_survives_the_round_trip.py`` is about.
+    """
+    return str(baseline_days[-1]["date"])
+
+
+@pytest.fixture(scope="session")
+def a_day_the_mandrake_is_dormant() -> str:
+    """A date inside the greenhouse mandrake's dormancy, read from the fixtures.
+
+    Its care rule *suspends* watering rather than stretching it, so on such a
+    day the plant has no task at all — and the round has to say so by name
+    instead of letting it drop off. Derived rather than written down so that
+    editing the species moves the test with it.
+    """
+    specimen = next(
+        row
+        for row in load_fixture("specimens/specimens.json")
+        if row["id"] == MANDRAKE_IN_THE_GREENHOUSE
+    )
+    species = next(
+        row
+        for row in load_fixture("species/species.json")
+        if row["id"] == specimen["species_id"]
+    )
+    months = sorted(species["dormancy_months"])
+    assert months, "fixture drift: the mandrake is the dormancy case"
+    return date(2026, months[0], 15).isoformat()
+
+
+@pytest.fixture(scope="session")
+def a_day_the_weather_does_not_cover(weather_last_day: str) -> str:
+    """Six weeks past the end of the shipped weather."""
+    return (date.fromisoformat(weather_last_day) + timedelta(days=46)).isoformat()
+
+
+# ------------------------------------------------------------- the contract
+
+
+@pytest.fixture(scope="session")
+def contract(spec: dict) -> Any:
+    """A validator for one named schema out of the frozen OpenAPI document.
+
+    ``jsonschema`` arrives with ``openapi-spec-validator``, which
+    ``tests/contract/`` already depends on.
+
+    Contract 1.3.0 made ``confidence``, ``degraded`` and ``degradations``
+    required on ``Task``, ``WaterBalance`` and ``FrostAlert``, and
+    ``unscheduled`` required on ``MorningRounds``. Validating the live
+    responses here is how this suite proves the app is not quietly dropping
+    them: a required field that goes missing is a silent loss of exactly the
+    honesty ADR 0018 and ADR 0020 were written to keep.
+    """
+    from jsonschema import Draft202012Validator
+
+    schemas = spec["components"]["schemas"]
+
+    def check(payload: Any, schema_name: str) -> None:
+        schema = dict(schemas[schema_name])
+        # Resolve $ref against the same document by handing the validator the
+        # component section as the schema's own definitions.
+        schema["components"] = {"schemas": schemas}
+        errors = [
+            error
+            for error in Draft202012Validator(schema).iter_errors(payload)
+            if not is_known_contract_gap(error)
+        ]
+        errors.sort(key=lambda error: list(error.path))
+        assert not errors, "\n".join(
+            f"{schema_name}{list(error.path)}: {error.message}" for error in errors
+        )
+
+    return check
+
+
+def is_known_contract_gap(error: Any) -> bool:
+    """One place where the frozen contract and the running app disagree.
+
+    ``Task.completed_by`` is ``$ref: Member`` with no null branch, while
+    ``completed_at`` and ``detail`` beside it are both ``["string", "null"]``.
+    An *open* task has nobody who completed it, so every task in every round
+    fails 1.3.0 on this one field. The app is right and the contract wants a
+    null: making the app invent a member to satisfy the schema would put a lie
+    in the completion history, which is the feature.
+
+    Raised with Workstream A in the pull request, and pinned by
+    ``test_the_contract_gap_this_suite_exempts_is_still_there`` — so the day A
+    adds the null branch, that test goes red and this exemption is deleted
+    rather than quietly outliving what it was for.
+    """
+    path = list(error.path)
+    return bool(path) and path[-1] == "completed_by" and error.instance is None
+
+
+# ------------------------------------------------------------------ the feed
+
+
+def subscribe(client: Any, **filters: Any) -> str:
+    """Create a calendar feed and return the path a subscriber would fetch.
+
+    The token is only ever in the URL (Workstream G keeps it off the response
+    body on purpose), so this pulls the path out of ``https_url`` the way a
+    calendar client would follow it.
+    """
+    from urllib.parse import urlparse
+
+    response = client.post(
+        "/api/v1/tending/feeds",
+        json={
+            "member_id": KEEPER_ID,
+            "name": "Scenario suite",
+            "filters": filters,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return str(urlparse(response.json()["https_url"]).path)
+
+
+_UNFOLD = re.compile(r"\r\n[ \t]")
+
+
+def ics_events(document: str) -> dict[str, dict[str, str]]:
+    """Every ``VEVENT`` in a feed, keyed by UID.
+
+    Keyed by UID because that is the assertion this suite keeps making: a
+    watering the rain settled is *cancelled by the UID it already had*, not
+    dropped and not reissued under a new one. A dict keyed by UID also makes a
+    duplicate impossible to miss, so the count is checked before it is built.
+    """
+    unfolded = _UNFOLD.sub("", document)
+    events: dict[str, dict[str, str]] = {}
+    uids: list[str] = []
+    for block in unfolded.split("BEGIN:VEVENT")[1:]:
+        body = block.split("END:VEVENT")[0]
+        properties: dict[str, str] = {}
+        for line in body.splitlines():
+            if not line.strip() or ":" not in line:
+                continue
+            name, _, value = line.partition(":")
+            properties[name.split(";")[0].strip().upper()] = value.strip()
+        uid = properties.get("UID", "")
+        uids.append(uid)
+        events[uid] = properties
+    assert len(uids) == len(set(uids)), (
+        "the same UID appears twice in one feed — every subscriber would get "
+        "two events for one task"
+    )
+    return events
+
+
+def tasks_by_specimen(tasks: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {task["specimen"]["id"]: task for task in tasks}
