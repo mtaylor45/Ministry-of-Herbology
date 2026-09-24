@@ -1,0 +1,188 @@
+"""Putting the running deployment under a recorded week — Workstream E.
+
+``fixtures/scenarios/`` has held ``drought``, ``storm`` and ``frost`` since S0,
+and until S5 nothing but a unit test could read them: ``world.weather_days``
+took a ``scenario=`` argument and every caller in the running app left it out.
+So the app was permanently on ``weather/baseline_30d.json``, and the sprint's
+exit criterion — *rain visibly clears due waterings* — could not be shown to
+anybody, in a test or in a browser.
+
+``MOH_WEATHER_SCENARIO`` and ``MOH_WEATHER_SCENARIO_DAY`` are that switch. They
+are operator inputs under ADR 0019: no usable default, unset in every shipped
+deployment, and documented rather than discovered. These tests hold the two
+properties that make them worth having — the API and the worker read the *same*
+setting, and an unset setting changes nothing at all.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+
+from workers.weather import world
+from workers.weather.settings import WeatherSettings
+
+STORM_RAIN = date(2026, 7, 7)
+
+
+@pytest.fixture
+def baseline(settings: WeatherSettings) -> WeatherSettings:
+    return settings
+
+
+@pytest.fixture
+def storm(settings: WeatherSettings) -> WeatherSettings:
+    return settings.model_copy(update={"weather_scenario": "storm"})
+
+
+# ------------------------------------------------------------------ the switch
+
+
+def test_an_unset_scenario_is_the_baseline_recording(baseline):
+    """The shipped default. Nothing about S5 changes what a deployment does."""
+    assert world.active_scenario(baseline) is None
+    assert world.as_of_day(baseline) is None
+
+    days = world.weather_days(baseline)
+    assert len(days) == 30
+    assert days[0].day == date(2026, 5, 1)
+
+
+def test_selecting_a_scenario_changes_what_the_weather_is(storm):
+    assert world.active_scenario(storm) == "storm"
+    days = world.weather_days(storm)
+    assert days[0].day == date(2026, 7, 1)
+    assert [day.precip_mm for day in days if day.precip_mm] == [38.0]
+
+
+def test_the_as_of_day_ends_the_series_there(storm):
+    """The balance is a history that ends *now*, so "now" has to be sayable.
+
+    ``storm`` runs three days past its downpour. Replayed whole, the deficit
+    has already rebuilt and the series honestly reports ``ok`` — which is the
+    right answer to a question nobody was asking. An operator who wants to
+    watch the rain land stands on the day it fell.
+    """
+    settings = storm.model_copy(update={"weather_scenario_day": STORM_RAIN})
+    days = world.weather_days(settings)
+    assert days[-1].day == STORM_RAIN
+    assert days[-1].precip_mm == 38.0
+
+    # An explicit argument still wins, which is what the worker's
+    # ``evaluate_water_balance(day=...)`` has always done.
+    assert world.weather_days(settings, through=date(2026, 7, 3))[-1].day == date(
+        2026, 7, 3
+    )
+
+
+def test_the_forecast_rows_and_the_balance_days_come_from_one_loader(storm):
+    """Two loaders is how the Almanac shows rain the balance never saw."""
+    rows = world.weather_rows(storm)
+    days = world.weather_days(storm)
+    assert [row["date"] for row in rows] == [day.day.isoformat() for day in days]
+    assert "condition" in rows[0], "the screens need it; the equation does not"
+
+
+def test_the_frost_guard_follows_the_operator_s_scenario_too(baseline, storm):
+    """One deployment, one week of weather — both halves of the Almanac.
+
+    With nothing selected this stays on ``frost``, where it has been since S3:
+    the baseline is a mild fortnight in May, and a frost endpoint that answers
+    "nothing, ever" is not a mock of anything.
+    """
+    assert min(night.low_c for night in world.frost_nights(baseline)) == -2.0
+    assert min(night.low_c for night in world.frost_nights(storm)) == 16.0
+    assert world.frost_nights(storm, scenario="frost")[0].low_c == 14.0
+
+
+def test_a_scenario_that_does_not_exist_says_so(settings):
+    """A typo must not read as "fine, no weather" (ADR 0010)."""
+    bad = settings.model_copy(update={"weather_scenario": "sotrm"})
+    with pytest.raises(ValueError, match="names no recording"):
+        world.weather_rows(bad)
+
+
+def test_a_scenario_name_may_not_be_a_path():
+    """It is interpolated into a filename, so it is checked on the way in."""
+    for attempt in ("../../etc/passwd", "storm/../../secrets", "a b"):
+        with pytest.raises(ValueError, match="plain fixture name"):
+            WeatherSettings(weather_scenario=attempt)
+    assert WeatherSettings(weather_scenario="  storm  ").weather_scenario == "storm"
+    assert WeatherSettings(weather_scenario="").weather_scenario is None
+
+
+# -------------------------------------------------- the API and the worker agree
+
+
+def test_the_endpoint_and_the_job_read_the_same_setting(storm, run):
+    """The one property worth a test all of its own.
+
+    If the Almanac resolved the scenario and the worker did not, a deployment
+    would serve a balance cleared by rain out of one process while the other
+    wrote rows that never saw it, and the disagreement would surface as a task
+    that reappears overnight.
+    """
+    from almanac import service as almanac
+
+    from workers.weather import tasks
+
+    settings = storm.model_copy(update={"weather_scenario_day": STORM_RAIN})
+    lemon = "01890040-0000-7000-8000-000000000004"  # 45 L, open sky
+
+    report = run(tasks.evaluate_water_balance({"settings": settings}))
+    from_job = next(row for row in report["specimens"] if row["specimen_id"] == lemon)
+
+    payload = almanac.water_balance(lemon, settings=settings)
+    assert payload is not None
+    assert payload["status"] == from_job["status"] == "satisfied"
+    assert payload["deficit_mm"] == from_job["deficit_mm"]
+    assert payload["satisfied_by"] == "rain"
+
+
+def test_the_frost_lookahead_is_not_cut_off_at_today(settings):
+    """The balance ends at today; the guard is about the nights after it.
+
+    Truncating the frost series at ``MOH_WEATHER_SCENARIO_DAY`` would leave a
+    deployment standing two nights before a freeze reporting no freeze — the
+    quiet-app failure ADR 0010 is about, with a dead lemon at the end of it
+    rather than a stale number.
+    """
+    under_frost = settings.model_copy(
+        update={
+            "weather_scenario": "frost",
+            "weather_scenario_day": date(2026, 10, 21),
+        }
+    )
+    assert world.weather_days(under_frost)[-1].day == date(2026, 10, 21)
+
+    nights = world.frost_nights(under_frost)
+    assert max(night.day for night in nights) == date(2026, 10, 28)
+    assert min(night.low_c for night in nights) == -2.0, "the freeze is still seen"
+
+    from almanac import service as almanac
+
+    alerts = almanac.frost(settings=under_frost)
+    assert alerts, "a freeze two nights out must still raise"
+    assert {alert["action"] for alert in alerts} <= {"bring_indoors", "cover"}
+
+
+def test_a_day_outside_the_recording_is_refused(settings):
+    """No weather is not "nothing to do"; it is a misconfiguration (ADR 0010).
+
+    An empty series advances no deficit, so every plant would read as
+    comfortable and the app would go quiet — indistinguishable from a garden
+    that needs nothing, which is the one failure this engine may never produce.
+    """
+    out_of_range = settings.model_copy(
+        update={
+            "weather_scenario": "storm",
+            "weather_scenario_day": date(2026, 1, 1),
+        }
+    )
+    with pytest.raises(ValueError, match="outside scenarios/storm.json"):
+        world.weather_days(out_of_range)
+
+    # The frost guard asking for its own recording by name is not affected by a
+    # day that belongs to a different one.
+    assert world.frost_nights(out_of_range, scenario="frost")

@@ -22,17 +22,29 @@ up in one process. Wiring it is noted for A and B in the S3 pull request.
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from workers.weather import world
+from workers.weather.quality import (
+    Assessment,
+    Degradation,
+    assess,
+    certainty_not_recorded,
+    ingest_stale,
+    weakest,
+)
+from workers.weather.settings import WeatherSettings
 from workers.weather.settings import get_settings as weather_settings
 from workers.weather.store import SITE_METRICS, WINDOW_DAYS
 from workers.weather.tasks import (
     BalanceSeries,
     DayWeather,
     FrostNight,
+    day_status,
     frost_alerts,
     run_balance,
 )
@@ -60,15 +72,23 @@ UNITS = {
 # ------------------------------------------------------------------ forecast
 
 
-def forecast(site_id: str, horizon: str) -> list[dict[str, Any]]:
+def forecast(
+    site_id: str, horizon: str, *, settings: WeatherSettings | None = None
+) -> list[dict[str, Any]]:
     """The 10-day daily or 1-day hourly forecast, as ``ForecastPoint`` rows.
 
     In mock mode this is the baseline fixture put through the same Open-Meteo
     parser the live ingest uses, rather than a second hand-rolled shape — so a
     field the parser drops is a field the Almanac stops showing, and somebody
     finds out here rather than in production.
+
+    Under a selected scenario (``MOH_WEATHER_SCENARIO``) it is that recording
+    instead, starting at the day the operator is standing on: a forecast is the
+    days ahead of now, and a deployment whose water balance has just been
+    cleared by rain must not show a forecast from the week before it fell.
     """
-    days = fixtures.baseline_weather()["days"]
+    settings = settings or weather_settings()
+    days = _rows_from(settings, _as_of(settings))
     if horizon == "daily":
         return [_daily_point(day) for day in days[:10]]
     return _hourly_points(days[0])
@@ -123,6 +143,38 @@ def _hourly_points(day: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+# ------------------------------------------- which recording, and which day
+#
+# One reading of the setting, in ``workers.weather.world``, shared with the
+# worker. These three are the thinnest possible wrapper over it, so that
+# ``forecast``, ``history`` and ``water_balance`` all answer about the same
+# week — and so that nothing in this package grows its own idea of "today".
+
+
+def _as_of(settings: WeatherSettings) -> date | None:
+    return world.as_of_day(settings)
+
+
+def _rows_from(settings: WeatherSettings, day: date | None) -> list[dict[str, Any]]:
+    """The recording from ``day`` onward — what is still ahead of the reader.
+
+    Never empty: ``world.weather_rows`` refuses a day outside the recording, so
+    the day itself is always one of these rows.
+    """
+    rows = world.weather_rows(settings)
+    if day is None:
+        return rows
+    return [row for row in rows if date.fromisoformat(row["date"]) >= day]
+
+
+def _rows_through(settings: WeatherSettings, day: date | None) -> list[dict[str, Any]]:
+    """The recording up to and including ``day`` — what has already happened."""
+    rows = world.weather_rows(settings)
+    if day is None:
+        return rows
+    return [row for row in rows if date.fromisoformat(row["date"]) <= day]
+
+
 # ------------------------------------------------------------------- history
 
 
@@ -133,6 +185,7 @@ def history(
     site_id: str | None = None,
     location_id: str | None = None,
     specimen_id: str | None = None,
+    settings: WeatherSettings | None = None,
 ) -> dict[str, Any]:
     """A bucketed series, column-oriented, ready to hand straight to uPlot.
 
@@ -142,7 +195,8 @@ def history(
     days and the rollups carry the long history, so a query that scans the
     hypertable is both slower now and wrong later.
     """
-    days = fixtures.baseline_weather()["days"][-WINDOW_DAYS[window] :]
+    settings = settings or weather_settings()
+    days = _rows_through(settings, _as_of(settings))[-WINDOW_DAYS[window] :]
     times: list[int] = []
     values: list[float | None] = []
     lows: list[float | None] = []
@@ -187,17 +241,24 @@ def history(
 # ------------------------------------------------------------- water balance
 
 
-def water_balance(specimen_id: str) -> dict[str, Any] | None:
+def water_balance(
+    specimen_id: str, *, settings: WeatherSettings | None = None
+) -> dict[str, Any] | None:
     """The deficit history and current state for one specimen.
 
     Returns ``None`` when there is no such specimen, so the router owns the
     404 and this stays a function about water.
+
+    ``settings`` is an argument, defaulting to the process's own, so that the
+    scenario a test or a demo is standing in can be stated rather than smuggled
+    through a cached global — and so the worker's job and this endpoint can be
+    handed the *same* object and shown to agree.
     """
     specimen = fixtures.by_id(fixtures.specimens(), specimen_id)
     if not specimen:
         return None
 
-    settings = weather_settings()
+    settings = settings or weather_settings()
     context = world.specimen_contexts(settings).get(specimen_id)
     if context is None:
         return None
@@ -261,7 +322,7 @@ def serialise_balance(
 # --------------------------------------------------------------------- frost
 
 
-def frost() -> list[dict[str, Any]]:
+def frost(*, settings: WeatherSettings | None = None) -> list[dict[str, Any]]:
     """Open frost alerts within the 72h lookahead.
 
     Computed from the forecast by the engine, not read back out of the
@@ -269,7 +330,7 @@ def frost() -> list[dict[str, Any]]:
     only that the fixture can be parsed; this one fails when the engine is
     wrong, which is the entire purpose of having it.
     """
-    settings = weather_settings()
+    settings = settings or weather_settings()
     contexts = world.specimen_contexts(settings)
     report = frost_alerts(
         world.frost_nights(settings),
@@ -307,14 +368,16 @@ def frost() -> list[dict[str, Any]]:
     return out
 
 
-def unassessable_for_frost() -> list[dict[str, str]]:
+def unassessable_for_frost(
+    *, settings: WeatherSettings | None = None
+) -> list[dict[str, str]]:
     """Plants whose frost risk cannot be judged, with the reason.
 
     Served as the ``unassessable`` half of ``/almanac/frost`` since ADR 0018
     gave that response an envelope. A plant is never dropped silently: if the
     engine cannot judge it, it is named here with the reason it could not.
     """
-    settings = weather_settings()
+    settings = settings or weather_settings()
     contexts = world.specimen_contexts(settings)
     report = frost_alerts(
         world.frost_nights(settings),
@@ -418,3 +481,198 @@ def day_weather_from_rows(rows: list[dict[str, Any]]) -> list[DayWeather]:
         )
         for row in rows
     ]
+
+
+# --------------------------------------------- the live water balance (ADR 0020 §4)
+#
+# ADR 0018 put `confidence`, `degraded` and `degradations` on this endpoint's
+# *response*; migration 004 gave `water_balance` somewhere to keep them, and
+# writing them is E's (the ADR says so explicitly). `workers/weather/store.py`
+# now does. This is the other half: a read that hands back what was written,
+# so a deployment on Postgres answers with the same doubt as a deployment on
+# fixtures instead of the flat `medium` a bare number could support.
+#
+# What the table still cannot carry is named rather than guessed at. It keeps
+# no `status`, no `satisfied_by`, no `et0_method` and no forecast flag, so:
+#
+#   * `status` and `satisfied_by` are replayed from consecutive stored rows
+#     through `tasks.day_status` — the same rule the engine ran, not a second
+#     copy of it — which recovers them exactly for any day whose predecessor is
+#     also stored, and reports the first day of the window as `ok`/`due` only;
+#   * `et0_method`, `reference_et0_mm`, `gross_precip_mm` and `is_forecast` are
+#     *omitted* per day rather than filled in with a plausible value. None is
+#     required by the contract, and a `hargreaves` that nobody recorded is an
+#     invented fact about how a number was arrived at.
+#
+# Columns for those are a contract change and therefore A's; it is raised in
+# the pull request rather than worked around here (rule 1).
+
+
+def balance_from_rows(
+    specimen_id: str,
+    rows: Sequence[Any],
+    *,
+    is_outdoor: bool = True,
+    today: date | None = None,
+) -> dict[str, Any] | None:
+    """Stored ``water_balance`` rows as the contract's ``WaterBalance``.
+
+    Pure, and takes rows rather than a connection, for the reason the rest of
+    this module gives: the interesting part is the certainty arithmetic, and it
+    should be testable without a database.
+    """
+    ordered = [row for row in rows if row is not None]
+    if not ordered:
+        return None
+    latest = ordered[-1]
+
+    days: list[dict[str, Any]] = []
+    previous: Any = None
+    for row in ordered:
+        deficit = float(_field(row, "deficit_mm") or 0.0)
+        threshold = float(_field(row, "threshold_mm") or 0.0)
+        rain = float(_field(row, "precip_mm") or 0.0)
+        irrigation = float(_field(row, "irrigation_mm") or 0.0)
+        was_due = previous is not None and float(
+            _field(previous, "deficit_mm") or 0.0
+        ) >= float(_field(previous, "threshold_mm") or 0.0)
+        status, satisfied_by = day_status(
+            was_due=was_due,
+            now_due=deficit >= threshold,
+            # Already multiplied by the cover factor when it was written, so a
+            # plant under a roof is not watered here by rain it never saw.
+            rain_mm=rain,
+            irrigation_mm=irrigation,
+        )
+        days.append(
+            {
+                "day": _day_of(row).isoformat(),
+                "deficit_mm": round(deficit, 2),
+                "et0_mm": round(float(_field(row, "et0_mm") or 0.0), 2),
+                "precip_mm": round(rain, 2),
+                "irrigation_mm": round(irrigation, 2),
+                "status": status,
+                "satisfied_by": satisfied_by,
+            }
+        )
+        previous = row
+
+    deficit = float(_field(latest, "deficit_mm") or 0.0)
+    capacity = float(_field(latest, "capacity_mm") or 0.0)
+    threshold = float(_field(latest, "threshold_mm") or 0.0)
+    override = _field(latest, "sensor_override_pct")
+    # A probe outranks the model (ADR 0010). No hardware drives this today.
+    is_due = float(override) < 30.0 if override is not None else deficit >= threshold
+
+    assessment = stored_assessment(latest, today=today)
+    payload: dict[str, Any] = {
+        "specimen_id": specimen_id,
+        "deficit_mm": round(deficit, 2),
+        "capacity_mm": round(capacity, 2),
+        "threshold_mm": round(threshold, 2),
+        "k_c": _field(latest, "k_c"),
+        "is_due": is_due,
+        "sensor_override_pct": None if override is None else float(override),
+        "days": days,
+        "status": days[-1]["status"],
+        "satisfied_by": days[-1]["satisfied_by"],
+        "cover_factor": _field(latest, "cover_factor"),
+        **assessment.to_dict(),
+    }
+    if not is_outdoor:
+        payload["applies"] = False
+        payload["note"] = (
+            "Indoor specimens are watered on an interval rule, not on the "
+            "outdoor water balance. This deficit is shown for reference only."
+        )
+    else:
+        payload["applies"] = True
+    return payload
+
+
+def stored_assessment(row: Any, *, today: date | None = None) -> Assessment:
+    """What a stored row says it was worth, plus what the row itself betrays.
+
+    Two things are added to the recorded reasons rather than trusted from the
+    column alone:
+
+    * a row whose ``confidence`` is NULL predates ADR 0020 §4 or was written by
+      something that skipped it. That is "it did not say", and it reads as
+      ``unknown`` — never as ``medium``, which would be the laundering ADR 0018
+      exists to stop;
+    * a row older than today means the deficit has not advanced since it was
+      computed, so the real figure is higher than the stored one. Under ADR
+      0010 nothing else would ever notice.
+    """
+    recorded = _field(row, "confidence")
+    degradations = [
+        Degradation(
+            code=str(entry.get("code") or "unknown"),
+            detail=str(entry.get("detail") or ""),
+            caps_at=str(entry.get("caps_at") or "medium"),
+        )
+        for entry in _degradations(_field(row, "degradations"))
+    ]
+    if not recorded:
+        degradations.append(certainty_not_recorded())
+
+    stale_days = (today - _day_of(row)).days if today is not None else 0
+    if stale_days > 0:
+        degradations.append(ingest_stale(stale_days * 24.0))
+
+    # `base` is what the row claims for itself; the reasons above can only
+    # lower it. Capped at `medium` on the way in as well: a modelled deficit is
+    # a calculation about soil nobody has measured (ADR 0010), and `high` is
+    # reserved for a figure something actually observed. The engine that wrote
+    # the row applies the same ceiling — this one is for rows it did not write.
+    return assess(degradations, base=weakest("medium", str(recorded or "unknown")))
+
+
+async def live_water_balance(
+    connection: Any,
+    specimen_id: str,
+    *,
+    is_outdoor: bool = True,
+    today: date | None = None,
+    days: int = BALANCE_DAYS,
+) -> dict[str, Any] | None:
+    """The same answer as :func:`water_balance`, read from Postgres.
+
+    ``is_outdoor`` is passed in rather than looked up: the specimen belongs to
+    Workstream C's tables and this module does not query them.
+    """
+    from workers.weather.store import water_balance_history_sql
+
+    end = today or datetime.now(UTC).date()
+    sql, params = water_balance_history_sql(specimen_id, end - timedelta(days=days - 1))
+    rows = await connection.fetch(sql, *params)
+    return balance_from_rows(specimen_id, rows, is_outdoor=is_outdoor, today=end)
+
+
+def _field(row: Any, name: str) -> Any:
+    """One column, whether the row is an asyncpg Record or a plain mapping."""
+    try:
+        return row[name]
+    except (KeyError, TypeError, IndexError):
+        return getattr(row, name, None)
+
+
+def _day_of(row: Any) -> date:
+    value = _field(row, "day")
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
+def _degradations(value: Any) -> list[dict[str, Any]]:
+    """``degradations`` as asyncpg hands it back: json text, or already parsed."""
+    if not value:
+        return []
+    if isinstance(value, str | bytes | bytearray):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return []
+    return [entry for entry in value if isinstance(entry, dict)]

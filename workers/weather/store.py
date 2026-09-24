@@ -31,6 +31,7 @@ ordinary upserts.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any, Protocol, runtime_checkable
@@ -176,22 +177,87 @@ def upsert_advisory_sql(site_id: str, advisory: Advisory) -> Statement:
     return sql, [row[column] for column in columns]
 
 
+#: Columns of ``water_balance`` a computed row fills. The last three are ADR
+#: 0020 §4: the certainty that ``quality.py`` worked out, kept rather than
+#: recomputed. Before them, a live deployment read a deficit with no
+#: provenance and reported a flat ``medium`` — the live path quieter about its
+#: own doubt than the fixture-backed one, which is exactly backwards.
+WATER_BALANCE_COLUMNS = (
+    "day",
+    "specimen_id",
+    "deficit_mm",
+    "capacity_mm",
+    "threshold_mm",
+    "et0_mm",
+    "k_c",
+    "precip_mm",
+    "irrigation_mm",
+    "cover_factor",
+    "sensor_override_pct",
+    "confidence",
+    "degraded",
+    "degradations",
+)
+
+#: ``jsonb`` columns among them. asyncpg binds a Python list as an array, not
+#: as json, so the value is serialised by :func:`water_balance_row` and the
+#: placeholder is cast here. One entry today; a tuple so the next one is a
+#: one-line change rather than a second special case.
+_JSONB_COLUMNS = ("degradations",)
+
+
+def water_balance_row(
+    *,
+    day: date,
+    specimen_id: str,
+    series: Any,
+    last: Any,
+    cover_factor: float,
+    sensor_override_pct: float | None,
+) -> dict[str, Any]:
+    """A ``water_balance`` row from a finished :class:`BalanceSeries`.
+
+    Built here rather than inline in the job because the job is not the only
+    thing that will ever write one, and because the certainty fields are the
+    part that is easy to leave off — ADR 0020 §4 exists because they were.
+
+    ``degradations`` is serialised to a json string, not left as a list: see
+    :data:`_JSONB_COLUMNS`.
+    """
+    assessment = series.assessment
+    return {
+        "day": day,
+        "specimen_id": specimen_id,
+        "deficit_mm": series.deficit_mm,
+        "capacity_mm": series.capacity_mm,
+        "threshold_mm": series.threshold_mm,
+        "et0_mm": last.demand_mm,
+        "k_c": series.k_c.effective,
+        "precip_mm": last.precip_mm,
+        "irrigation_mm": last.irrigation_mm,
+        "cover_factor": cover_factor,
+        "sensor_override_pct": sensor_override_pct,
+        "confidence": assessment.confidence,
+        "degraded": assessment.is_degraded,
+        "degradations": json.dumps(
+            [degradation.to_dict() for degradation in assessment.degradations]
+        ),
+    }
+
+
 def upsert_water_balance_sql(row: dict[str, Any]) -> Statement:
-    """One ``water_balance`` row per specimen per day, keyed on both."""
-    columns = (
-        "day",
-        "specimen_id",
-        "deficit_mm",
-        "capacity_mm",
-        "threshold_mm",
-        "et0_mm",
-        "k_c",
-        "precip_mm",
-        "irrigation_mm",
-        "cover_factor",
-        "sensor_override_pct",
+    """One ``water_balance`` row per specimen per day, keyed on both.
+
+    A row written without ``confidence``/``degraded``/``degradations`` is
+    accepted — migration 004 defaults them — and reads afterwards as "it did
+    not say", which is what the ADR asks for and is not the same as "it was
+    certain".
+    """
+    columns = WATER_BALANCE_COLUMNS
+    placeholders = ", ".join(
+        f"${index + 1}::jsonb" if column in _JSONB_COLUMNS else f"${index + 1}"
+        for index, column in enumerate(columns)
     )
-    placeholders = ", ".join(f"${index + 1}" for index in range(len(columns)))
     updates = ", ".join(
         f"{column} = EXCLUDED.{column}"
         for column in columns
@@ -308,7 +374,11 @@ def water_balance_history_sql(specimen_id: str, since: date) -> Statement:
     """
     sql = (
         "SELECT day, deficit_mm, capacity_mm, threshold_mm, et0_mm, k_c, "
-        "precip_mm, irrigation_mm, cover_factor, sensor_override_pct "
+        "precip_mm, irrigation_mm, cover_factor, sensor_override_pct, "
+        # ADR 0020 §4. Selected here so a database-backed read can answer with
+        # the doubt the engine recorded, instead of the flat `medium` that was
+        # all a row without these columns could honestly support.
+        "confidence, degraded, degradations "
         "FROM water_balance WHERE specimen_id = $1 AND day >= $2 ORDER BY day"
     )
     return sql, [specimen_id, since]
