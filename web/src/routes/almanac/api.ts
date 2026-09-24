@@ -8,37 +8,14 @@
  * repeats the request rather than reshaping anything client-side.
  */
 
-import type { Confidence } from '$api/client';
 import { get, type Fetcher } from '../shared/http';
+import type { Assessment } from '../shared/assessment';
 
-export type { Confidence };
 export { ApiError, reason, settle, type Fetched, type Fetcher } from '../shared/http';
-
-/** One named reason an answer is worth less than a clean measurement.
- *
- *  `detail` is a finished sentence, written by the engine to be shown to a
- *  reader as it stands. It is never summarised, truncated or reworded here:
- *  the wording is E's half of the contract with whoever is holding the phone. */
-export interface Degradation {
-  code: string;
-  detail: string;
-  caps_at: Confidence;
-}
-
-/** How sure an engine is, and why it is not surer.
- *
- *  ADR 0018 puts this block on `WaterBalance` and `FrostAlert` and makes it
- *  required there. It does **not** put it on `ForecastPoint` or `Series`, and
- *  the served responses carry nothing of the sort — so the two endpoints this
- *  screen is built from cannot say that their ingest is a day stale or that
- *  their evaporation figure was computed locally. That is the gap this screen
- *  raises with A rather than papering over; see `reportsItsOwnConfidence` in
- *  `assessment.ts`. Optional here, so the screen works either way. */
-export interface Assessment {
-  confidence?: Confidence;
-  degraded?: boolean;
-  degradations?: Degradation[];
-}
+// The certainty vocabulary is shared with Morning Rounds and lives in
+// `shared/assessment.ts`; re-exported here so the Almanac's screens keep
+// reading their types from one place.
+export type { Assessment, Confidence, Degradation } from '../shared/assessment';
 
 /** `ForecastPoint`. Daily rows carry min/max; hourly rows carry `temperature_c`. */
 export interface ForecastPoint extends Assessment {

@@ -10,7 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { html, text } from '$ui/render';
-import Caveats from './Caveats.svelte';
+import Caveats from '../shared/Caveats.svelte';
 import Chart from './Chart.svelte';
 import DayRow from './DayRow.svelte';
 import SiteMissing from './SiteMissing.svelte';
@@ -24,7 +24,7 @@ import {
   measurementConfidence,
   reportsItsOwnConfidence,
   weakest,
-} from './assessment';
+} from '../shared/assessment';
 import {
   FROST_MARGIN_C,
   addDays,
