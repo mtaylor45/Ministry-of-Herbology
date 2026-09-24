@@ -161,6 +161,10 @@ def contract(spec: dict) -> Any:
     responses here is how this suite proves the app is not quietly dropping
     them: a required field that goes missing is a silent loss of exactly the
     honesty ADR 0018 and ADR 0020 were written to keep.
+
+    This validates the schemas this suite's own assertions are about.
+    ``tests/contract/test_responses_match_their_schemas.py`` is the general
+    case: every endpoint, every declared response.
     """
     from jsonschema import Draft202012Validator
 
@@ -171,36 +175,15 @@ def contract(spec: dict) -> Any:
         # Resolve $ref against the same document by handing the validator the
         # component section as the schema's own definitions.
         schema["components"] = {"schemas": schemas}
-        errors = [
-            error
-            for error in Draft202012Validator(schema).iter_errors(payload)
-            if not is_known_contract_gap(error)
-        ]
-        errors.sort(key=lambda error: list(error.path))
+        errors = sorted(
+            Draft202012Validator(schema).iter_errors(payload),
+            key=lambda error: list(error.path),
+        )
         assert not errors, "\n".join(
             f"{schema_name}{list(error.path)}: {error.message}" for error in errors
         )
 
     return check
-
-
-def is_known_contract_gap(error: Any) -> bool:
-    """One place where the frozen contract and the running app disagree.
-
-    ``Task.completed_by`` is ``$ref: Member`` with no null branch, while
-    ``completed_at`` and ``detail`` beside it are both ``["string", "null"]``.
-    An *open* task has nobody who completed it, so every task in every round
-    fails 1.3.0 on this one field. The app is right and the contract wants a
-    null: making the app invent a member to satisfy the schema would put a lie
-    in the completion history, which is the feature.
-
-    Raised with Workstream A in the pull request, and pinned by
-    ``test_the_contract_gap_this_suite_exempts_is_still_there`` — so the day A
-    adds the null branch, that test goes red and this exemption is deleted
-    rather than quietly outliving what it was for.
-    """
-    path = list(error.path)
-    return bool(path) and path[-1] == "completed_by" and error.instance is None
 
 
 # ------------------------------------------------------------------ the feed

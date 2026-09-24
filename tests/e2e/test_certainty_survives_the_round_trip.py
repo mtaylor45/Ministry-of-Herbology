@@ -84,23 +84,6 @@ def test_every_answer_the_app_serves_carries_its_certainty(
         contract(alert, "FrostAlert")
 
 
-def test_the_contract_gap_this_suite_exempts_is_still_there(spec: dict) -> None:
-    """Pins the one exemption in ``conftest.is_known_contract_gap``.
-
-    ``Task.completed_by`` is ``$ref: Member`` with no null branch while
-    ``completed_at`` beside it is ``["string", "null"]``, so every *open* task
-    the app serves fails 1.3.0 on that one field. The app is right — inventing
-    a member to satisfy the schema would put a lie in the completion history —
-    and the fix belongs to Workstream A. When A makes it, this test goes red
-    and the exemption gets deleted instead of quietly outliving its reason.
-    """
-    completed_by = spec["components"]["schemas"]["Task"]["properties"]["completed_by"]
-    assert completed_by == {"$ref": "#/components/schemas/Member"}, (
-        "`Task.completed_by` now admits a null — delete the exemption in "
-        "tests/e2e/conftest.py and this test with it"
-    )
-
-
 # ------------------------------------------------- one uncertainty, followed
 
 
