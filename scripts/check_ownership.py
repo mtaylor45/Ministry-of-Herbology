@@ -27,16 +27,10 @@ OWNERSHIP: dict[str, list[str]] = {
         "scripts/",
         ".env.example",
         ".gitignore",
-        # ADR 0019: the deployment guide is the deliverable, and it is B's.
+        # The deployment guide is part of the deployment (ADR 0019): the stack
+        # files and the instructions for running them change together or the
+        # instructions are fiction.
         "docs/deploy/",
-        # A workstream's own brief. tests/test_ownership_rules.py requires each
-        # brief to name the paths its workstream owns, so a workstream that
-        # gains a path — as B just gained docs/deploy/ — cannot satisfy that
-        # test without editing its own file. Narrow on purpose: this is B's
-        # brief only, not the directory. The same line will be needed for every
-        # other workstream the first time one of them gains a path, and
-        # generalising it is A's call, not B's.
-        ".claude/agents/ws-b-platform.md",
     ],
     "C": ["api/inventory/"],
     "D": ["workers/botany/"],

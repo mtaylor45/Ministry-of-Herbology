@@ -984,6 +984,45 @@ docker service update --image "$MOH_REGISTRY/moh-worker:$MOH_IMAGE_TAG" moh_work
 
 Tag each build distinctly — which `make push` does — and this is rare.
 
+### The image build fails on `pip install` or `npm ci` with a certificate error
+
+```
+SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED]
+  certificate verify failed: self-signed certificate in certificate chain'))
+```
+
+Your network re-terminates TLS — a corporate proxy, a filtering appliance, some
+VPNs — so the build container sees that appliance's certificate rather than
+PyPI's or npm's, and does not trust it. Nothing is wrong with the Dockerfiles;
+they trust the public roots their base images ship, which is correct for anyone
+not behind such a proxy.
+
+The repository does not carry a workaround, deliberately: baking one
+organisation's CA into these images would be both useless and slightly
+dangerous everywhere else. Add yours at build time instead, in a copy of the
+Dockerfile you keep on your own side:
+
+```dockerfile
+# In the Debian-based stages (api, worker):
+COPY your-ca.crt /usr/local/share/ca-certificates/your-ca.crt
+RUN update-ca-certificates
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+```
+
+`node:22-slim` ships no CA bundle at all, so the web image needs the file
+pointed at directly rather than appended to a bundle that does not exist:
+
+```dockerfile
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/your-ca.crt
+COPY your-ca.crt /usr/local/share/your-ca.crt
+RUN npm config set cafile /usr/local/share/your-ca.crt
+```
+
+Both of these were needed to build the images while writing this guide, in an
+environment with exactly this kind of proxy, and both worked. They were kept
+out of the tree for the reason above.
+
 ### Something is wrong and you want to start over
 
 Volumes and secrets survive `docker stack rm`. To remove the data too — and
@@ -1058,10 +1097,14 @@ Linux host with `ip_vs` present, the shipped `vip` mode is the right default
 and none of this applies — but it means VIP mode specifically has not been
 exercised here. See the troubleshooting entry on 502s if you meet it.
 
-**The images were built through a TLS-intercepting proxy.** The Dockerfiles in
-this repository were used unmodified for what they contain; the build in this
-environment needed the proxy's CA added, which was done in a throwaway copy
-rather than in the tree. Nothing about that reaches what you build.
+**The images were built through a TLS-intercepting proxy.** The environment
+this was walked in re-terminates TLS, so `pip install` and `npm ci` could not
+verify PyPI or npm without that proxy's CA. The Dockerfiles in the tree are
+unmodified — the CA went into a throwaway copy, never here, because one
+organisation's CA baked into these images helps nobody else. If your network
+does the same thing you will meet it too, and the troubleshooting section has
+the two stanzas that worked. Nothing about it reaches what you build
+otherwise.
 
 ### Not executed at all
 
