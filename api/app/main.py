@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from workers.botany.router import router as botany_router
 
 from almanac.router import router as almanac_router
+from app.log_redaction import install as install_log_redaction
 from app.settings import get_settings
 from grounds.router import router as grounds_router
 from inventory.router import router as inventory_router
@@ -23,6 +24,12 @@ from tending.router import router as tending_router
 CONTRACT_VERSION = (
     (Path(__file__).resolve().parents[2] / "contracts" / "VERSION").read_text().strip()
 )
+
+# The calendar token rides in the URL because Google's and Apple's fetchers
+# carry no session (ADR 0019). Redact it out of the access log before anything
+# serves a request, so the promise that it "is never logged" is true of this
+# process and not only of the package that issues it.
+install_log_redaction()
 
 app = FastAPI(
     title="The Ministry of Herbology API",

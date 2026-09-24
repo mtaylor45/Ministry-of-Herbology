@@ -69,6 +69,40 @@ operator can see them:
   It is never logged, never reused across feeds, and revoking one must not
   disturb the others.
 
+> **Addendum, 2026-09-24 — "never logged" was not true, in two places.**
+>
+> The token rides in the URL path (`/api/v1/calendar/{token}.ics`) because
+> Google's and Apple's calendar fetchers send no session and no headers. There
+> is nowhere else to put it. That makes every component which logs a request
+> path a place the credential lands.
+>
+> Workstream G found the first: uvicorn writes the path for every request it
+> serves. Its own package keeps the promise — no logger, no `print`, and a test
+> that says so — but the promise is about the deployment, not about one package.
+>
+> The second turned up while fixing the first, and is the more instructive.
+> Nginx *did* carry an `access_log off` guard, with a comment explaining the
+> exact risk: "a calendar token being readable to anyone who can read logs —
+> which, on a self-hosted box, is usually a backup." It guarded
+> `/api/v1/feeds/`, which no route has ever served. The real paths are
+> `/api/v1/calendar/{token}.ics` and `/api/v1/tending/feeds`. Every fetch fell
+> through to `location /api/` and wrote the credential into `$request`.
+>
+> **The intent was right, the comment claimed the risk was handled, and the
+> prefix matched nothing.** A guard aimed at the wrong path is worse than no
+> guard, because it stops anyone looking again.
+>
+> Fixed in both halves, and both are now asserted by
+> `tests/test_calendar_token_is_never_logged.py` rather than trusted:
+> `api/app/log_redaction.py` rewrites the path out of `uvicorn.access` records,
+> which also covers running the API with no front end at all; and the Nginx
+> guard now names the two paths that actually carry a token — the feed list
+> among them, because its *responses* contain webcal URLs with tokens inside.
+>
+> The status, timing and client address survive redaction, so the log still
+> answers the question an operator actually asks it: is the feed being fetched,
+> and does it work.
+
 ## Consequences
 
 **Workstream B's S3/S4 task is now: make this deployable by a stranger.** Not a
