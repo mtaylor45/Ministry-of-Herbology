@@ -135,3 +135,46 @@ def test_the_satisfied_rule_is_one_function_both_paths_call():
         "ok",
         None,
     ), "a covered plant sees no rain, so nothing satisfied it"
+
+
+# ------------------------------------------------- rule 6, at the coefficient
+
+
+def test_a_source_id_that_resolves_to_nothing_is_not_a_citation():
+    """Rule 6. The raw id used to be shown as the citation and read as cited.
+
+    Two failures in one: a uuid where a reader expects a title — the defect ADR
+    0021 §1 fixed one layer out — and a value that kept whatever confidence it
+    claimed because ``source`` was not ``None``. Contract 1.4.0 made the
+    unsourced state sayable (``CareValue.source`` is nullable, ADR 0021 §8), and
+    this is what saying it looks like here.
+    """
+    dangling = WaterCoefficient.from_care_value(
+        {"value": 0.9, "confidence": "high", "source_id": "01890000-dead-beef"},
+        None,  # no such row in species/sources.json
+    )
+    assert dangling.source is None
+    assert dangling.confidence == "unknown"
+    assert [reason.code for reason in dangling.degradations()] == ["k_c_uncited"]
+
+
+def test_a_resolved_source_is_cited_by_its_title():
+    cited = WaterCoefficient.from_care_value(
+        {"value": 0.9, "confidence": "high", "source_id": "s1"},
+        {"id": "s1", "title": "FAO-56 Table 12", "kind": "publication"},
+    )
+    assert cited.source == "FAO-56 Table 12"
+    assert cited.confidence == "high"
+    assert cited.degradations() == []
+
+
+def test_a_household_override_needs_no_outside_source():
+    """The stated exception: somebody attesting to a number is not nobody.
+
+    ``CareValue``'s own description carries it — *a value with no source must
+    carry confidence unknown unless it is a user override*.
+    """
+    override = WaterCoefficient.from_care_value(
+        {"value": 0.75, "confidence": "medium", "is_user_override": True}, None
+    )
+    assert override.confidence == "medium"

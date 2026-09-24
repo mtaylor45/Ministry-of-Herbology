@@ -126,6 +126,40 @@ and read back by `almanac.service.balance_from_rows`. Two details:
 4. **`.env.example` and `docs/deploy/` are B's.** The two variables above want a
    line in each; E cannot write either.
 
+## Contract 1.4.0, folded in after the merge
+
+A landed 1.4.0 and ADR 0021 mid-sprint. Two pieces were in `api/almanac/`:
+
+- **`UnassessableSpecimen.specimen`** (§1) is now populated on the `unassessable`
+  half of `/almanac/frost`. It is built from the `world.SpecimenContext` that
+  produced the verdict rather than from a second lookup in `fixtures`: a plant
+  that could not be assessed must not then fail to appear because the lookup for
+  its *name* missed. `frost()` was changed the same way for the same reason — it
+  dropped an alert whose specimen row it could not find, which under ADR 0010
+  means a plant freezes because a name could not be resolved.
+- **`CareValue.source` nullable** (§8) needed no change in the balance path.
+  `WaterCoefficient.from_care_value` already handled a missing source rather
+  than coercing one, and E serves no `CareValue`.
+
+  It did, however, turn up the same defect §1 fixes, one layer down in E's own
+  code: a `source_id` that resolved to no row fell back to the **raw uuid** as
+  the citation, so `k_c_source` showed a reader a uuid *and* the value read as
+  cited, keeping whatever confidence it claimed. Rule 6 is the other way round.
+  An unresolved citation is now no citation: `source: None`, `confidence:
+  unknown`, `k_c_uncited` on the answer. A user override is the stated exception
+  and keeps its confidence.
+
+**And A's point about how those four were found is now acted on.** Nothing in
+this repository validated a response body against the frozen schemas, which is
+how every task the API served could violate the contract since 1.0.0 with the
+unit tests green. `api/almanac/tests/test_almanac_response_schemas.py` validates
+all four Almanac responses against the frozen document — under the baseline *and*
+under a scenario, since a scenario is a different route through the same
+serialisers. It reports every violation rather than the first, and one test
+proves the validator bites (five deliberate breaches of a real response, all
+caught, including a uuid-format one). `Task`'s new conditional requirement of
+`satisfied_by` is held at the far end of the chain by the end-to-end test.
+
 ## Not done
 
 Nothing in the brief was left unfinished. The soil-sensor override remains a

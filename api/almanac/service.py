@@ -329,6 +329,11 @@ def frost(*, settings: WeatherSettings | None = None) -> list[dict[str, Any]]:
     scenario's own ``expect`` block. A mock that replays the assertions proves
     only that the fixture can be parsed; this one fails when the engine is
     wrong, which is the entire purpose of having it.
+
+    The ``SpecimenBrief`` is built from the context the alert was raised from
+    rather than from a second lookup in ``fixtures``. The previous version
+    dropped an alert whose specimen row it could not find, which under ADR 0010
+    means a plant freezes because a *name* could not be resolved.
     """
     settings = settings or weather_settings()
     contexts = world.specimen_contexts(settings)
@@ -341,20 +346,14 @@ def frost(*, settings: WeatherSettings | None = None) -> list[dict[str, Any]]:
 
     out: list[dict[str, Any]] = []
     for alert in report.alerts:
-        specimen = fixtures.by_id(fixtures.specimens(), alert.specimen_id)
-        if not specimen:
-            continue
         out.append(
             {
                 "id": str(
                     uuid.uuid5(FROST_NAMESPACE, f"{alert.specimen_id}:{alert.night_of}")
                 ),
-                "specimen": {
-                    "id": specimen["id"],
-                    "display_name": fixtures.display_name(specimen),
-                    "is_outdoor": bool(specimen.get("is_outdoor")),
-                    "thumb_url": None,
-                },
+                "specimen": _brief_from_context(
+                    alert.specimen_id, contexts.get(alert.specimen_id)
+                ),
                 "night_of": alert.night_of.isoformat(),
                 "forecast_low_c": round(alert.forecast_low_c, 1),
                 "threshold_c": round(alert.threshold_c, 2),
@@ -370,12 +369,23 @@ def frost(*, settings: WeatherSettings | None = None) -> list[dict[str, Any]]:
 
 def unassessable_for_frost(
     *, settings: WeatherSettings | None = None
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Plants whose frost risk cannot be judged, with the reason.
 
     Served as the ``unassessable`` half of ``/almanac/frost`` since ADR 0018
     gave that response an envelope. A plant is never dropped silently: if the
     engine cannot judge it, it is named here with the reason it could not.
+
+    And *named*: ``specimen`` carries the ``SpecimenBrief`` contract 1.4.0 added
+    (ADR 0021 §1), because a panel whose entire purpose is to name the plants
+    nobody could judge, and which printed a uuid instead, had degraded into the
+    thing it was built to prevent. ``specimen_id`` stays beside it until 1.5.0
+    retires it.
+
+    The brief is built from the :class:`world.SpecimenContext` that produced the
+    verdict, not from a second lookup in ``fixtures``. A plant that could not be
+    assessed must not then fail to appear because the lookup for its name missed
+    — that would be the same hole one layer further out.
     """
     settings = settings or weather_settings()
     contexts = world.specimen_contexts(settings)
@@ -386,9 +396,35 @@ def unassessable_for_frost(
         lookahead_hours=settings.frost_lookahead_hours,
     )
     return [
-        {"specimen_id": specimen_id, "reason": reason}
+        {
+            "specimen_id": specimen_id,
+            "specimen": _brief_from_context(specimen_id, contexts.get(specimen_id)),
+            "reason": reason,
+        }
         for specimen_id, reason in report.unassessable
     ]
+
+
+def _brief_from_context(
+    specimen_id: str, context: world.SpecimenContext | None
+) -> dict[str, Any]:
+    """``SpecimenBrief`` from what the engine already knew about the plant.
+
+    ``display_name`` is required by the contract and must not be empty: the
+    whole point of the field is that a reader sees a plant rather than a uuid.
+    ``thumb_url`` is always ``None`` here — photos are Workstream C's and this
+    module does not query them.
+    """
+    return {
+        "id": specimen_id,
+        "display_name": (
+            context.display_name
+            if context and context.display_name
+            else "Unnamed specimen"
+        ),
+        "is_outdoor": bool(context.is_outdoor) if context else True,
+        "thumb_url": None,
+    }
 
 
 # ------------------------------------------------------------------ live path

@@ -181,6 +181,17 @@ class WaterCoefficient:
         category default. Workstream D writes those under ADR 0013; until it
         does, a cited value simply reads as species-level, which is the older
         and more generous reading — so this is re-checked when D lands.
+
+        **A ``source_id`` that resolves to nothing is not a citation.** This used
+        to fall back to the raw id when the source row could not be found, which
+        put a uuid in ``k_c_source`` — a reader shown a uuid where a title
+        belongs, the defect ADR 0021 §1 fixed one layer out — and, worse, made
+        the value read as *cited* so it kept whatever confidence it claimed.
+        Rule 6 is the other way round: a value nobody can be shown the source of
+        is ``unknown`` and visibly marked. A user override is the stated
+        exception (``CareValue``'s own description, and contract 1.4.0 made the
+        unsourced state sayable at last): the household attesting to a number is
+        a citation of a different kind, not an absent one.
         """
         if not care_value:
             return cls(value=None, confidence="unknown")
@@ -191,10 +202,13 @@ class WaterCoefficient:
         if is_default:
             # ADR 0013 caps a category default at medium, never high.
             confidence = weakest(confidence, "medium")
+        title = (source or {}).get("title")
+        if not title and not care_value.get("is_user_override"):
+            confidence = "unknown"
         return cls(
             value=_as_float(care_value.get("value")),
             confidence=confidence,
-            source=(source or {}).get("title") or care_value.get("source_id"),
+            source=str(title) if title else None,
             category=str(category) if category else None,
             is_category_default=is_default,
         )
