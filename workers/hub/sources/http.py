@@ -116,6 +116,36 @@ class HomeAssistantFetcher:
     async def get_json(
         self, kind: str, path: str, params: Mapping[str, Any] | None = None
     ) -> FetchResult:
+        return await self._request(kind, path, params=params)
+
+    async def post_json(
+        self, kind: str, path: str, body: Mapping[str, Any] | None = None
+    ) -> FetchResult:
+        """Call a Home Assistant service — the one thing this worker *does*.
+
+        ``POST /api/services/notify/<service>`` is the notification path (ADR
+        0009: Home Assistant is the only route out, and this app runs no push
+        service of its own). It is retried on the same statuses a read is, for
+        the same reason: a restarting hub is not a verdict. A duplicate
+        notification from a retry is a far smaller harm than a freeze warning
+        that was dropped because the hub was rebooting.
+
+        Home Assistant answers a service call with a JSON list of the states it
+        changed — usually empty for ``notify`` — so the payload is returned
+        rather than discarded, and an empty body is read as an empty list
+        instead of as a failure.
+        """
+        return await self._request(kind, path, body=body, method="POST")
+
+    async def _request(
+        self,
+        kind: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        body: Mapping[str, Any] | None = None,
+        method: str = "GET",
+    ) -> FetchResult:
         if not self.settings.ha_base_url:
             raise HubUnavailable(
                 f"{kind}: no Home Assistant base URL is configured " "(MOH_HA_BASE_URL)"
@@ -128,7 +158,10 @@ class HomeAssistantFetcher:
         for attempt in (0, 1):
             await self._wait_turn(host)
             try:
-                response = await self.client.get(url, params=dict(params or {}))
+                if method == "POST":
+                    response = await self.client.post(url, json=dict(body or {}))
+                else:
+                    response = await self.client.get(url, params=dict(params or {}))
             except httpx.HTTPError as exc:  # network, DNS, TLS, timeout
                 last_error = exc
                 response = None
@@ -153,6 +186,10 @@ class HomeAssistantFetcher:
                 f"{kind}: HTTP {response.status_code} from Home Assistant "
                 f"— {_reason(response)}"
             )
+        if method == "POST" and not response.content.strip():
+            # A service call that changed no state answers 200 with an empty
+            # body. That is success, not a parse failure.
+            return FetchResult(url=url, payload=[], retrieved_at=datetime.now(UTC))
         try:
             payload = response.json()
         except ValueError as exc:

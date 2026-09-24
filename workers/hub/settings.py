@@ -76,6 +76,26 @@ class HubSettings(BaseSettings):
     entity_max_age_s: float = 3600.0
     source_stale_after_s: float = 1800.0
 
+    #: ``MOH_API_URL`` — this deployment's own API, on its internal network.
+    #: The notification jobs ask it what is due and whether a frost is coming,
+    #: over the frozen contract rather than by reaching into another
+    #: workstream's package. ``infra/`` already sets this for the web service.
+    #: **No credential is ever sent on this call** — see
+    #: :mod:`workers.hub.notify.state`.
+    api_url: str = "http://api:8000"
+
+    #: ``MOH_HA_NOTIFY_SERVICE`` — a deployment-wide Home Assistant notify
+    #: service, used for members whose own ``notify_prefs`` name none. Empty by
+    #: default, which means *nobody is set up for notifications*: a perfectly
+    #: good answer for a fresh install, and one the Ministry Office reports as
+    #: a setup step rather than as a fault. Defaulting it to HA's ``notify.notify``
+    #: would be this app deciding to message every device in somebody's house.
+    ha_notify_service: str = ""
+
+    #: How long an integration must stay broken before it is worth interrupting
+    #: somebody. See :data:`workers.hub.notify.policy.HEALTH_GRACE_S`.
+    notify_health_grace_s: float = 1800.0
+
     mqtt_host: str = "mosquitto"
     mqtt_port: int = 1883
     mqtt_username: str = ""
@@ -102,6 +122,17 @@ class HubSettings(BaseSettings):
         if base.startswith("http://"):
             return "ws://" + base[len("http://") :] + "/api/websocket"
         return base + "/api/websocket"
+
+    @property
+    def can_notify(self) -> bool:
+        """Is there a Home Assistant *and* somewhere to send a notification?
+
+        Both halves, because they fail differently: no hub is an integration
+        that is down, and a hub with no notify target anywhere is a household
+        that has not finished setting up. Neither is an error and the Ministry
+        Office says different things about them.
+        """
+        return self.is_configured or self.mock_mode
 
     @property
     def is_configured(self) -> bool:

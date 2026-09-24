@@ -69,6 +69,22 @@ class Fetcher(Protocol):
     ) -> FetchResult: ...
 
 
+@runtime_checkable
+class Poster(Protocol):
+    """A fetcher that can also *ask Home Assistant to do something*.
+
+    Kept apart from :class:`Fetcher` deliberately. Everything in S3 read state
+    and changed nothing, and a read-only adapter is a safe thing to point at
+    somebody's house. S4 adds notifications, which are a service call — so the
+    ability to act is a second, narrower protocol that a caller has to ask for,
+    rather than a method quietly added to the one every poller already holds.
+    """
+
+    async def post_json(
+        self, kind: str, path: str, body: Mapping[str, Any] | None = None
+    ) -> FetchResult: ...
+
+
 @dataclass(frozen=True, slots=True)
 class EntityState:
     """One entity as ``GET /api/states`` returns it.

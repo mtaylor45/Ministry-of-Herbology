@@ -220,6 +220,28 @@ def integrations_sql() -> Statement:
     return sql, []
 
 
+def notified_keys_sql(since: datetime, jobs: Sequence[str]) -> Statement:
+    """Every notification key the notify jobs recorded since ``since``.
+
+    There is no ``notification`` table in the frozen schema, so "have we
+    already told them this?" is answered from ``job_run``, which each job
+    writes anyway. ``job_run_job_idx`` is on ``(job, started_at DESC)``, so
+    this is an index scan over a bounded window rather than a table sweep.
+
+    It is a workaround for a missing table and it is on the list for A. What it
+    cannot do is what a real table would: expire one key, or record *which*
+    member a key went to without unpacking the blob. What it can do is stop a
+    household being told the same thing twice, which is the whole requirement
+    today.
+    """
+    placeholders = ", ".join(f"${index + 2}" for index in range(len(jobs)))
+    sql = (
+        "SELECT detail FROM job_run WHERE started_at >= $1 "
+        f"AND job IN ({placeholders}) ORDER BY started_at DESC LIMIT 500"
+    )
+    return sql, [since, *jobs]
+
+
 def latest_reading_sql(source_id: str, metric: str) -> Statement:
     """The newest stored reading for one source and metric.
 
@@ -308,4 +330,13 @@ async def read_sensor_sources(
 
 async def read_integrations(connection: Connection) -> list[Any]:
     sql, params = integrations_sql()
+    return await connection.fetch(sql, *params)
+
+
+async def read_notified_keys(
+    connection: Connection, since: datetime, jobs: Sequence[str] | None = None
+) -> list[Any]:
+    from .notify.policy import NOTIFY_JOBS
+
+    sql, params = notified_keys_sql(since, tuple(jobs or NOTIFY_JOBS))
     return await connection.fetch(sql, *params)

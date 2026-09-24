@@ -108,6 +108,8 @@ class RecordedFetcher:
         self._now = now or (lambda: datetime.now(UTC))
         #: Every request this fetcher served, for tests that count calls.
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
+        #: Every service call, with its body. What the notification tests read.
+        self.posted: list[tuple[str, str, dict[str, Any]]] = []
 
     async def get_json(
         self, kind: str, path: str, params: Mapping[str, Any] | None = None
@@ -157,6 +159,29 @@ class RecordedFetcher:
             f"{kind}: nothing recorded for {path} and nothing to synthesise"
         )
 
+    async def post_json(
+        self, kind: str, path: str, body: Mapping[str, Any] | None = None
+    ) -> FetchResult:
+        """A service call that goes nowhere, and is kept so a test can read it.
+
+        Mock mode has to be able to demonstrate the notification path end to
+        end — the S4 exit criterion is shown on the mock stack before it is
+        shown on a deployment — and the useful half of a service call is the
+        body, not the socket. ``posted`` is what the tests assert against.
+
+        A ``notify`` service call is answered the way Home Assistant answers
+        one: ``200`` with an empty list, because it changed no entity's state.
+        """
+        payload = dict(body or {})
+        self.posted.append((kind, path, payload))
+        self.calls.append((kind, path, {}))
+        clean = path.split("?", 1)[0].strip("/")
+        if kind == "home_assistant" and clean.startswith("services/"):
+            return FetchResult(
+                url=path, payload=[], retrieved_at=self._now(), is_mock=True
+            )
+        raise HubUnavailable(f"{kind}: nothing to synthesise for POST {path}")
+
     # ------------------------------------------------------------ synthesis
 
     def _states(self, moment: datetime) -> list[dict[str, Any]]:
@@ -201,11 +226,25 @@ class UnavailableFetcher:
     def __init__(self, reason: str = "mock: the hub is unreachable") -> None:
         self.reason = reason
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
+        self.posted: list[tuple[str, str, dict[str, Any]]] = []
 
     async def get_json(
         self, kind: str, path: str, params: Mapping[str, Any] | None = None
     ) -> FetchResult:
         self.calls.append((kind, path, dict(params or {})))
+        raise HubUnavailable(f"{kind}: {self.reason}")
+
+    async def post_json(
+        self, kind: str, path: str, body: Mapping[str, Any] | None = None
+    ) -> FetchResult:
+        """A hub that is down cannot be notified through either.
+
+        The same failure for a service call as for a read, because it is the
+        same failure: under ADR 0009 Home Assistant is the only way out, so a
+        hub that is unreachable means the notification did not happen and the
+        job has to say so rather than count it sent.
+        """
+        self.posted.append((kind, path, dict(body or {})))
         raise HubUnavailable(f"{kind}: {self.reason}")
 
 
