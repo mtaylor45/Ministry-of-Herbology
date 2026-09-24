@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: The Ministry of Herbology API
-  version: 1.3.0
+  version: 1.4.0
   description: |
     Contract for the Ministry of Herbology. Frozen in S0 — only Workstream A
     changes this file, via an ADR. Every path declares the workstream that
@@ -829,10 +829,27 @@ components:
 
     UnassessableSpecimen:
       type: object
-      description: 'A plant whose risk could not be judged, and why.'
+      description: >-
+        A plant whose risk could not be judged, and why. Served as
+        `FrostReport.unassessable` and as `MorningRounds.unscheduled`.
+
+        The panel that renders this exists to *name* the plants nobody could
+        judge, so it carries the name. `specimen_id` alone forced every consumer
+        to make a second request to `/specimens` just to avoid printing a uuid
+        at a reader, and to print the uuid anyway when that request failed.
+        ADR 0021 §1.
+
+        `specimen` is optional in 1.4.0 and **required in 1.5.0**, when
+        `specimen_id` is retired. Populate it now; read it defensively until
+        then.
       required: [specimen_id, reason]
       properties:
-        specimen_id: { type: string, format: uuid }
+        specimen_id:
+          type: string
+          format: uuid
+          deprecated: true
+          description: 'Retired in 1.5.0 — read `specimen.id` instead.'
+        specimen:    { $ref: '#/components/schemas/SpecimenBrief' }
         reason:      { type: string }
 
     FrostReport:
@@ -874,7 +891,25 @@ components:
         id:   { type: string, format: uuid }
         name: { type: string }
         role: { type: string, enum: [keeper, tender, observer] }
-        notify_prefs: { type: object, additionalProperties: true }
+        notify_prefs:
+          type: object
+          additionalProperties: true
+          description: >-
+            Open by design, with a stated convention (ADR 0021 §4). The block
+            the Home Assistant adapter reads:
+
+            ```json
+            {"home_assistant": {
+              "service": "notify.mobile_app_marks_phone",
+              "rounds": true, "frost": true, "health": true,
+              "rounds_hour": 7, "quiet_hours": [22, 7], "units": "metric"}}
+            ```
+
+            `service` is a Home Assistant service name, **not** a credential —
+            any domain is accepted, including `script.*`. A member with no
+            `service` is simply not a recipient, which is the normal state of a
+            household where one person has the companion app. `rounds_hour` is
+            the hour in the *site's* local time. Unknown keys are preserved.
 
     Location:
       type: object
@@ -930,7 +965,9 @@ components:
         provenance:      { type: [string, 'null'] }
         status:          { $ref: '#/components/schemas/SpecimenStatus' }
         primary_photo_url: { type: [string, 'null'] }
-        next_task:       { $ref: '#/components/schemas/TaskBrief' }
+        next_task:
+          # Nothing scheduled is a normal state, and a common one.
+          anyOf: [{ $ref: '#/components/schemas/TaskBrief' }, { type: 'null' }]
         created_at:      { type: string, format: date-time }
 
     SpecimenBrief:
@@ -1040,7 +1077,12 @@ components:
         field:      { type: string, example: water_k_c }
         value:      {}
         unit:       { type: [string, 'null'] }
-        source:     { $ref: '#/components/schemas/SourceRef' }
+        source:
+          # This schema's own description says a value may have no source and
+          # must then be `confidence: unknown`. A bare $ref to an object made
+          # that state unsayable — the contract forbade the very case rule 6
+          # exists to handle. ADR 0021 §8.
+          anyOf: [{ $ref: '#/components/schemas/SourceRef' }, { type: 'null' }]
         confidence: { $ref: '#/components/schemas/Confidence' }
         is_user_override: { type: boolean }
         note:       { type: [string, 'null'] }
@@ -1224,7 +1266,11 @@ components:
         plain_title: { type: string, description: 'Plain equivalent, e.g. "Water the Monstera — 500 ml"' }
         detail:      { type: [string, 'null'] }
         completed_at: { type: [string, 'null'], format: date-time }
-        completed_by: { $ref: '#/components/schemas/Member' }
+        completed_by:
+          # A task that is not done has no completer. Served as null by every
+          # uncompleted task since 1.0.0, which a bare $ref to an object has
+          # always rejected. ADR 0021 §8.
+          anyOf: [{ $ref: '#/components/schemas/Member' }, { type: 'null' }]
         deep_link:   { type: string, description: '/specimen/{id}/tending' }
         confidence:  { $ref: '#/components/schemas/Confidence' }
         degraded:    { type: boolean }
@@ -1235,6 +1281,20 @@ components:
             Each carries a plain sentence in `detail`, written to be shown to
             the reader as-is. A task built on an unattested coefficient must not
             arrive looking like a measurement.
+      # ADR 0021 §2 — "satisfied" with no stated cause is the failure ADR 0018
+      # was written about: an answer that reads as reassurance while carrying no
+      # information. A screen should never have to say "the API did not say what
+      # settled it". Checked here rather than asked for in prose.
+      if:
+        properties:
+          status: { const: satisfied }
+        required: [status]
+      then:
+        required: [satisfied_by]
+        properties:
+          satisfied_by:
+            type: string
+            enum: [rain, sensor, forecast_change, manual]
 
     TaskCompletion:
       type: object
@@ -1414,7 +1474,9 @@ components:
         kind:        { type: string, enum: [growth, pest, disease, repot, prune, relocate, note] }
         occurred_at: { type: string, format: date-time }
         body:        { type: [string, 'null'] }
-        photo:       { $ref: '#/components/schemas/Photo' }
+        photo:
+          # Most log entries carry no photo.
+          anyOf: [{ $ref: '#/components/schemas/Photo' }, { type: 'null' }]
         data:        { type: object, additionalProperties: true }
 
     LogEntryCreate:
@@ -1433,7 +1495,14 @@ components:
         id:           { type: string, format: uuid }
         name:         { type: string }
         adapter:      { type: string, enum: [home_assistant, ecowitt, miflora, homekit, nest, manual] }
-        external_ids: { type: object, additionalProperties: { type: string } }
+        external_ids:
+          type: object
+          additionalProperties: { type: string }
+          description: >-
+            Metric name to the upstream entity that carries it, e.g.
+            `{"temperature": "sensor.greenhouse_temp"}`. Open for metrics this
+            app does not know about; the keys it does know are the reading
+            kinds. ADR 0021 §4.
         location_id:  { type: [string, 'null'], format: uuid }
         specimen_id:  { type: [string, 'null'], format: uuid }
         poll_seconds: { type: integer }
@@ -1442,12 +1511,25 @@ components:
 
     Integration:
       type: object
+      description: >-
+        One connected thing and whether it is answering. `status` is computed
+        from `enabled`, `last_ok_at` and `last_error` — it is not a column, so
+        it cannot disagree with them (ADR 0021 §5). Optional in 1.4.0,
+        **required in 1.5.0**.
       required: [id, kind, name, enabled]
       properties:
         id:         { type: string, format: uuid }
         kind:       { type: string }
         name:       { type: string }
         enabled:    { type: boolean }
+        status:
+          type: string
+          enum: [ok, degraded, down, stale, unconfigured]
+          description: >-
+            `stale` is the one `last_ok_at` and `last_error` cannot express:
+            answering, never erroring, and quietly hours behind. It is the
+            silent failure, so the server decides the threshold once rather
+            than each client inventing its own.
         last_ok_at: { type: [string, 'null'], format: date-time }
         last_error: { type: [string, 'null'] }
 
