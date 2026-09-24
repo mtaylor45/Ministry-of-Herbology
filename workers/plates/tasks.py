@@ -8,6 +8,8 @@ attribution it did not earn.
 
 from typing import ClassVar
 
+from workers.runtime import ArqBootstrap
+
 #: Tried in order. The first that yields a usable, clearly licensed image wins.
 PUBLIC_DOMAIN_SOURCES = [
     "biodiversity_heritage_library",
@@ -38,5 +40,5 @@ async def generate_plate(ctx: dict, species_id: str) -> None:  # pragma: no cove
     raise NotImplementedError("S8 (K): generated plate fallback")
 
 
-class WorkerSettings:
+class WorkerSettings(metaclass=ArqBootstrap):
     functions: ClassVar[list] = [source_plate, generate_plate]

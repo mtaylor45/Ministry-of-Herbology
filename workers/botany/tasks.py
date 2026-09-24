@@ -14,6 +14,8 @@ sources, ``resolve`` ranks what they said.
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from workers.runtime import ArqBootstrap
+
 #: Preference order when two sources disagree about the same field. Taxonomic
 #: authorities outrank aggregators; an aggregator outranks an encyclopaedia.
 SOURCE_RANK = {
@@ -136,5 +138,5 @@ async def enrich_species(
     }
 
 
-class WorkerSettings:
+class WorkerSettings(metaclass=ArqBootstrap):
     functions: ClassVar[list] = [resolve_taxon, enrich_species]
