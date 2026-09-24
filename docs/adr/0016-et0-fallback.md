@@ -1,8 +1,16 @@
 # ADR 0016 — A local ET₀ fallback, so the water balance never simply stops
 
-- **Status:** Accepted
+- **Status:** Accepted; amended 2026-09-23 by ADR 0018
 - **Date:** 2026-09-21
 - **Workstream:** A
+
+> **Amendment (ADR 0018, §5).** This ADR named `climate_indices` as the
+> implementation. Workstream E implemented FAO-56 Hargreaves as one pure
+> function with the equations written out, which is the whole of what was
+> needed, and the library is **not** a dependency. A self-hosted, offline-first
+> app earns more from one fewer dependency than from importing a package for a
+> single published formula. The function is the seam the library plugs into if
+> that ever changes. The method, its inputs and its confidence cap are unchanged.
 
 ## Context
 
