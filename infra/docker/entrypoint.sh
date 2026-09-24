@@ -37,8 +37,15 @@ for name in $(env | sed -n 's/^\(MOH_[A-Za-z0-9_]*\)_FILE=.*/\1/p'); do
     # $(cat) strips trailing newlines, which is the behaviour we want here.
     value=$(cat "$path")
     if [ -z "$value" ]; then
-        echo "moh-entrypoint: the secret at $path is empty." >&2
-        exit 1
+        # A warning, not a failure. Swarm will not start a service that refers
+        # to a secret which does not exist, so an operator with no Home
+        # Assistant still has to create moh_ha_token — blank. Treating empty as
+        # fatal made the documented way to deploy without Home Assistant a
+        # crash loop, which is how this was found. Empty means "not
+        # configured", and every setting that takes a credential already
+        # understands that: workers.hub.settings.is_configured is exactly this
+        # test.
+        echo "moh-entrypoint: $name is empty ($path); treating it as unset." >&2
     fi
     export "$name=$value"
     unset "${name}_FILE"

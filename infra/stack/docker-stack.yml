@@ -18,6 +18,14 @@
 #   MOH_NWS_USER_AGENT   a contact string; the US weather service refuses
 #                        traffic without one, and Open-Meteo deserves one
 #
+# Their `:?` messages below are terse, and deliberately contain no hyphen.
+# `docker stack deploy` mis-parses a hyphen inside a ${VAR:?message}: it reads
+# it as the `-` default-value operator and silently substitutes the text after
+# it. A hint reading "e.g. registry.example.net/ministry-of-herbology" does not
+# fail — it quietly deploys the image `of-herbology/moh-api`, which is then a
+# baffling "No such image" on every node. `make preflight` carries the useful
+# messages instead, and scripts/tests/test_stack_file.py keeps the hints clean.
+#
 # Secrets are swarm secrets, mounted as files, never environment variables
 # (ADR 0019 §3). Each service is handed the path, and infra/docker/entrypoint.sh
 # reads the file in the moment before exec. `docker service inspect` therefore
@@ -141,7 +149,11 @@ services:
         protocol: tcp
         mode: host
     healthcheck:
-      test: ['CMD-SHELL', 'timeout 2 sh -c "</dev/tcp/127.0.0.1/1883" || exit 1']
+      # BusyBox nc, not bash's /dev/tcp. This image is Alpine and its `sh` is
+      # ash, which has no /dev/tcp at all — a healthcheck written that way
+      # never passes, so swarm kills the broker every 90 seconds and the task
+      # history fills with clean exits that look like nothing is wrong.
+      test: ['CMD-SHELL', 'timeout 2 nc -z 127.0.0.1 1883 || exit 1']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -164,13 +176,13 @@ services:
   # --------------------------------------------------------------------------
 
   api:
-    image: ${MOH_REGISTRY:?set MOH_REGISTRY, e.g. registry.example.net/ministry-of-herbology}/moh-api:${MOH_IMAGE_TAG:?set MOH_IMAGE_TAG, e.g. 1.0.0 or a git sha}
+    image: ${MOH_REGISTRY:?MOH_REGISTRY is not set. See docs/deploy/README.md}/moh-api:${MOH_IMAGE_TAG:?MOH_IMAGE_TAG is not set. See docs/deploy/README.md}
     environment: &app_env
       # Off. The default in code is on, because every workstream builds against
       # mocks; leaving it on here would serve fixture plants to a real
       # household and look entirely convincing while doing it.
       MOH_MOCK_MODE: 'false'
-      MOH_PUBLIC_BASE_URL: ${MOH_PUBLIC_BASE_URL:?set MOH_PUBLIC_BASE_URL, e.g. https://herbology.example.net}
+      MOH_PUBLIC_BASE_URL: ${MOH_PUBLIC_BASE_URL:?MOH_PUBLIC_BASE_URL is not set. See docs/deploy/README.md}
       # The entrypoint assembles MOH_DATABASE_URL from these plus the password
       # file, percent-encoding as it goes.
       MOH_DB_HOST: db
@@ -183,7 +195,7 @@ services:
       MOH_MQTT_PORT: '1883'
       MOH_MQTT_USERNAME: ${MOH_MQTT_USERNAME:-herbology}
       MOH_MQTT_PASSWORD_FILE: /run/secrets/moh_mqtt_password
-      MOH_NWS_USER_AGENT: ${MOH_NWS_USER_AGENT:?set MOH_NWS_USER_AGENT to something with a contact address, e.g. "ministry-of-herbology (you@example.net)"}
+      MOH_NWS_USER_AGENT: ${MOH_NWS_USER_AGENT:?MOH_NWS_USER_AGENT is not set. See docs/deploy/README.md}
       # Optional integrations. Empty is a valid answer and means "not
       # configured"; the secret still has to exist, because swarm will not
       # start a service referring to one that does not.
@@ -232,13 +244,13 @@ services:
           memory: ${MOH_API_MEMORY_RESERVATION:-192m}
 
   web:
-    image: ${MOH_REGISTRY:?set MOH_REGISTRY, e.g. registry.example.net/ministry-of-herbology}/moh-web:${MOH_IMAGE_TAG:?set MOH_IMAGE_TAG, e.g. 1.0.0 or a git sha}
+    image: ${MOH_REGISTRY:?MOH_REGISTRY is not set. See docs/deploy/README.md}/moh-web:${MOH_IMAGE_TAG:?MOH_IMAGE_TAG is not set. See docs/deploy/README.md}
     environment:
       NODE_ENV: production
       # Server-side rendering talks to the API directly over the overlay
       # network; the browser reaches it through Nginx on the public origin.
       MOH_API_URL: http://api:8000
-      MOH_PUBLIC_BASE_URL: ${MOH_PUBLIC_BASE_URL:?set MOH_PUBLIC_BASE_URL, e.g. https://herbology.example.net}
+      MOH_PUBLIC_BASE_URL: ${MOH_PUBLIC_BASE_URL:?MOH_PUBLIC_BASE_URL is not set. See docs/deploy/README.md}
       TZ: ${MOH_TZ:-UTC}
     networks:
       - app
@@ -281,7 +293,7 @@ services:
   # --------------------------------------------------------------------------
 
   worker-weather:
-    image: ${MOH_REGISTRY:?set MOH_REGISTRY, e.g. registry.example.net/ministry-of-herbology}/moh-worker:${MOH_IMAGE_TAG:?set MOH_IMAGE_TAG, e.g. 1.0.0 or a git sha}
+    image: ${MOH_REGISTRY:?MOH_REGISTRY is not set. See docs/deploy/README.md}/moh-worker:${MOH_IMAGE_TAG:?MOH_IMAGE_TAG is not set. See docs/deploy/README.md}
     environment:
       <<: *app_env
       WORKER_MODULE: workers.weather.tasks
@@ -307,7 +319,7 @@ services:
           memory: ${MOH_WORKER_MEMORY_RESERVATION:-128m}
 
   worker-botany:
-    image: ${MOH_REGISTRY:?set MOH_REGISTRY, e.g. registry.example.net/ministry-of-herbology}/moh-worker:${MOH_IMAGE_TAG:?set MOH_IMAGE_TAG, e.g. 1.0.0 or a git sha}
+    image: ${MOH_REGISTRY:?MOH_REGISTRY is not set. See docs/deploy/README.md}/moh-worker:${MOH_IMAGE_TAG:?MOH_IMAGE_TAG is not set. See docs/deploy/README.md}
     environment:
       <<: *app_env
       WORKER_MODULE: workers.botany.tasks
@@ -318,7 +330,7 @@ services:
     deploy: *worker_deploy
 
   worker-hub:
-    image: ${MOH_REGISTRY:?set MOH_REGISTRY, e.g. registry.example.net/ministry-of-herbology}/moh-worker:${MOH_IMAGE_TAG:?set MOH_IMAGE_TAG, e.g. 1.0.0 or a git sha}
+    image: ${MOH_REGISTRY:?MOH_REGISTRY is not set. See docs/deploy/README.md}/moh-worker:${MOH_IMAGE_TAG:?MOH_IMAGE_TAG is not set. See docs/deploy/README.md}
     environment:
       <<: *app_env
       WORKER_MODULE: workers.hub.tasks
@@ -329,7 +341,7 @@ services:
     deploy: *worker_deploy
 
   worker-plates:
-    image: ${MOH_REGISTRY:?set MOH_REGISTRY, e.g. registry.example.net/ministry-of-herbology}/moh-worker:${MOH_IMAGE_TAG:?set MOH_IMAGE_TAG, e.g. 1.0.0 or a git sha}
+    image: ${MOH_REGISTRY:?MOH_REGISTRY is not set. See docs/deploy/README.md}/moh-worker:${MOH_IMAGE_TAG:?MOH_IMAGE_TAG is not set. See docs/deploy/README.md}
     environment:
       <<: *app_env
       WORKER_MODULE: workers.plates.tasks

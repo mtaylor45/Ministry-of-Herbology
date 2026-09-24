@@ -23,7 +23,7 @@ BUILD_TIMESTAMP := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 IMAGES          := api web worker
 
 .PHONY: help dev down logs fixtures test test-api test-web lint format check contract
-.PHONY: images push stack-config stack-deploy stack-rm stack-ps
+.PHONY: images push preflight stack-config stack-deploy stack-rm stack-ps
 .PHONY: migrate migrate-status backup restore-check
 
 help:
@@ -119,30 +119,62 @@ push: require-registry require-clean-tree images ## Build, then push to MOH_REGI
 	@echo "Deploy this build with:  MOH_IMAGE_TAG=$(MOH_IMAGE_TAG) make stack-deploy"
 
 # `docker stack deploy` interpolates from the shell and has no --env-file, so
-# the env file is sourced here rather than passed. set -a exports every
-# assignment in it; the two `set +a` lines put the shell back as it was.
-define load_env
-set -a; \
-[ -f "$(MOH_ENV_FILE)" ] && . "./$(MOH_ENV_FILE)"; \
-set +a;
-endef
+# the file has to reach the environment somehow. Not by sourcing it: the very
+# first value this project asks for, MOH_NWS_USER_AGENT, contains parentheses,
+# and `. ./.env.deploy` dies on them with an error naming neither the file nor
+# the line. scripts/with_env.sh reads KEY=VALUE and evaluates nothing.
+WITH_ENV := scripts/with_env.sh $(MOH_ENV_FILE) --
+
+# The stack file's own `:?` messages have to stay terse and hyphen-free, or
+# `docker stack deploy` silently substitutes part of the message (see the
+# comment at the top of the stack file). The readable version lives here.
+preflight: ## Check that everything the deploy needs is present
+	@$(WITH_ENV) sh -c '\
+	  fail=0; \
+	  for v in MOH_REGISTRY MOH_IMAGE_TAG MOH_PUBLIC_BASE_URL MOH_NWS_USER_AGENT; do \
+	    eval "value=\$$$$v"; \
+	    [ -n "$$value" ] && continue; \
+	    fail=1; \
+	    case $$v in \
+	      MOH_REGISTRY) echo "MOH_REGISTRY: your registry and namespace, no trailing slash." ;; \
+	      MOH_IMAGE_TAG) echo "MOH_IMAGE_TAG: the tag to run. make push prints the one it built." ;; \
+	      MOH_PUBLIC_BASE_URL) echo "MOH_PUBLIC_BASE_URL: the https:// URL the app is reached on, no trailing slash." ;; \
+	      MOH_NWS_USER_AGENT) echo "MOH_NWS_USER_AGENT: a contact address. The US weather service refuses traffic without one." ;; \
+	    esac; \
+	  done; \
+	  if [ $$fail -ne 0 ]; then \
+	    echo; echo "Set these in $(MOH_ENV_FILE). docs/deploy/README.md section 7."; \
+	    exit 1; \
+	  fi; \
+	  echo "Required variables: all four present."'
+	@missing=""; \
+	for s in moh_db_password moh_mqtt_password moh_mqtt_passwords moh_ha_token moh_tls_cert moh_tls_key; do \
+	  docker secret inspect "$$s" >/dev/null 2>&1 || missing="$$missing $$s"; \
+	done; \
+	if [ -n "$$missing" ]; then \
+	  echo "Missing swarm secret(s):$$missing"; \
+	  echo "docs/deploy/README.md section 6 gives the command for each."; \
+	  exit 1; \
+	fi; \
+	echo "Swarm secrets: all six present."
 
 stack-config: ## Render the stack with your variables filled in, and check it
-	@$(load_env) \
-	docker compose -f $(STACK_FILE) config
+	@$(WITH_ENV) docker compose -f $(STACK_FILE) config
 
-stack-deploy: ## Deploy or update the stack (reads MOH_ENV_FILE)
+stack-deploy: preflight ## Deploy or update the stack (reads MOH_ENV_FILE)
 	@test -f "$(MOH_ENV_FILE)" || { \
 	  echo "$(MOH_ENV_FILE) does not exist."; \
-	  echo "Copy .env.example to $(MOH_ENV_FILE) and fill it in — every value is"; \
-	  echo "yours to choose. docs/deploy/README.md walks through it."; \
+	  echo "Copy the deployment section of .env.example into $(MOH_ENV_FILE) and"; \
+	  echo "fill it in — every value is yours to choose. docs/deploy/README.md"; \
+	  echo "walks through it."; \
 	  exit 1; }
-	@$(load_env) \
-	MOH_IMAGE_TAG="$${MOH_IMAGE_TAG:-$(MOH_IMAGE_TAG)}" \
-	docker stack deploy \
-	  --detach=false \
-	  --resolve-image=always \
-	  -c $(STACK_FILE) "$(MOH_STACK)"
+	@MOH_FALLBACK_TAG="$(MOH_IMAGE_TAG)" $(WITH_ENV) sh -c '\
+	  MOH_IMAGE_TAG="$${MOH_IMAGE_TAG:-$$MOH_FALLBACK_TAG}"; \
+	  export MOH_IMAGE_TAG; \
+	  exec docker stack deploy \
+	    --detach=false \
+	    --resolve-image=always \
+	    -c $(STACK_FILE) "$(MOH_STACK)"'
 
 stack-ps: ## What the stack is doing
 	@docker stack ps "$(MOH_STACK)" \
