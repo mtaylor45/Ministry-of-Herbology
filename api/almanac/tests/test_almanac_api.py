@@ -213,7 +213,7 @@ def test_frost_alerts_are_computed_not_replayed(client):
 
     These come out of the engine, so a broken threshold breaks this test.
     """
-    alerts = client.get("/api/v1/almanac/frost").json()
+    alerts = client.get("/api/v1/almanac/frost").json()["alerts"]
     assert alerts
     for alert in alerts:
         assert alert["specimen"]["is_outdoor"]
@@ -225,29 +225,34 @@ def test_frost_alerts_are_computed_not_replayed(client):
 
 def test_an_alert_id_is_stable_across_calls(client):
     """A dismissed alert must not come back as a new one after a restart."""
-    first = {alert["id"] for alert in client.get("/api/v1/almanac/frost").json()}
-    second = {alert["id"] for alert in client.get("/api/v1/almanac/frost").json()}
+    first = {a["id"] for a in client.get("/api/v1/almanac/frost").json()["alerts"]}
+    second = {a["id"] for a in client.get("/api/v1/almanac/frost").json()["alerts"]}
     assert first == second
     assert all(len(alert_id) == 36 for alert_id in first)
 
 
 def test_a_hardy_plant_is_never_in_the_list(client):
     """A false alert on a lavender teaches people to ignore the real one."""
-    alerts = client.get("/api/v1/almanac/frost").json()
+    alerts = client.get("/api/v1/almanac/frost").json()["alerts"]
     assert LAVENDER_HEDGE not in {alert["specimen"]["id"] for alert in alerts}
 
 
 def test_the_nws_advisory_reaches_the_alert(client):
-    alerts = client.get("/api/v1/almanac/frost").json()
+    alerts = client.get("/api/v1/almanac/frost").json()["alerts"]
     assert any(alert["advisory"] for alert in alerts)
 
 
-def test_no_plant_is_dropped_from_the_frost_guard_in_silence():
-    """A plant that cannot be judged is named, even though the contract's
-    response type has no room to say so. Raised with A in the S3 pull request."""
+def test_no_plant_is_dropped_from_the_frost_guard_in_silence(client):
+    """A plant that cannot be judged is named, on the endpoint itself.
+
+    ADR 0018 gave the response an envelope for exactly this. An unanswerable
+    question must not reach the reader looking like a reassuring answer.
+    """
+    report = client.get("/api/v1/almanac/frost").json()
+    assert set(report) == {"alerts", "unassessable"}
+    for row in report["unassessable"]:
+        assert row["specimen_id"] and row["reason"]
+
     from almanac import service
 
-    unassessable = service.unassessable_for_frost()
-    assert isinstance(unassessable, list)
-    for row in unassessable:
-        assert row["specimen_id"] and row["reason"]
+    assert report["unassessable"] == service.unassessable_for_frost()

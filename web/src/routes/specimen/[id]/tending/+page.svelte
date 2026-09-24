@@ -30,7 +30,9 @@
   const kC = $derived(careValues.find((v) => v.field === 'water_k_c') ?? null);
 
   const frostAlerts = $derived(
-    (data.frost.value ?? []).filter((a) => a.specimen.id === specimen.id && a.state === 'open'),
+    (data.frost.value?.alerts ?? []).filter(
+      (a) => a.specimen.id === specimen.id && a.state === 'open',
+    ),
   );
 
   const waterFacts = $derived<Fact[]>(

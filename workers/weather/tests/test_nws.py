@@ -195,32 +195,35 @@ def test_an_alert_without_an_id_or_an_event_is_skipped():
 def test_the_point_lookup_names_the_zone_the_coordinates_are_actually_in(
     source, run, fixture
 ):
-    """The recording disagrees with ``fixtures/site.json``, and that matters.
+    """``site.json`` and the coordinates must name the same zone.
 
-    ``site.json`` says ``INZ050`` (Wayne County); the site's own coordinates
-    resolve to ``INZ047`` (Marion County). An advisory fetched for the wrong
-    county is an advisory about somebody else's frost. Fixtures belong to L and
-    A, so this test states the discrepancy rather than papering over it — see
-    ``mocks/recorded/PROVENANCE.md`` and the S3 pull request.
+    They did not until ADR 0018: the fixture said ``INZ050`` (Wayne County)
+    while the site's own coordinates resolve to ``INZ047`` (Marion County), and
+    an advisory fetched for the wrong county is an advisory about somebody
+    else's frost. The fixture was corrected; this asserts the agreement so it
+    cannot drift back. The recorded ``/points`` payload is the evidence — see
+    ``mocks/recorded/PROVENANCE.md``.
     """
     point = run(source.resolve_point(39.7684, -86.1581))
     assert point["forecast_zone"] == "INZ047"
     assert point["grid_id"] == "IND"
     assert point["forecast_url"].endswith("/forecast")
-    assert fixture("site.json")["nws_zone"] == "INZ050"
+    assert fixture("site.json")["nws_zone"] == point["forecast_zone"]
 
 
 def test_both_zone_recordings_name_the_county_they_cover(payload):
-    """The fixture discrepancy, as evidence rather than as an assertion.
+    """Why the zone had to be corrected, kept as evidence.
 
-    NWS titles each zone's alert feed with the county it covers. Recording both
-    zones means nobody has to take this report on trust.
+    NWS titles each zone's alert feed with the county it covers. Both zones stay
+    recorded so the correction in ADR 0018 rests on the two feeds rather than on
+    anybody's report of them — and so a future edit back to INZ050 has this
+    sitting next to it.
     """
-    named = payload("nws/alerts__inz050.json")["title"]
-    actual = payload("nws/alerts__inz047.json")["title"]
-    assert "Wayne (INZ050)" in named, "the zone fixtures/site.json names"
-    assert "Marion (INZ047)" in actual, "the zone the coordinates resolve to"
-    assert named != actual
+    wrong = payload("nws/alerts__inz050.json")["title"]
+    right = payload("nws/alerts__inz047.json")["title"]
+    assert "Wayne (INZ050)" in wrong, "the zone site.json used to name"
+    assert "Marion (INZ047)" in right, "the zone the coordinates resolve to"
+    assert wrong != right
 
 
 def test_a_source_that_is_down_is_reported_not_raised(run):

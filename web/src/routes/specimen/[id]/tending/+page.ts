@@ -11,7 +11,7 @@ import {
   reads,
   settle,
   type CareRule,
-  type FrostAlert,
+  type FrostReport,
   type Task,
   type WaterBalance,
 } from '../api';
@@ -22,7 +22,7 @@ export const load: PageLoad = async ({ params, fetch, depends }) => {
     settle<Task[]>(reads.tasks(params.id, fetch)),
     settle<CareRule[]>(reads.careRules(params.id, fetch)),
     settle<WaterBalance>(reads.waterBalance(params.id, fetch)),
-    settle<FrostAlert[]>(reads.frost(fetch)),
+    settle<FrostReport>(reads.frost(fetch)),
   ]);
   return { tasks, rules, water, frost };
 };

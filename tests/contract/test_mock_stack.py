@@ -98,9 +98,23 @@ def test_almanac_serves_forecast_and_all_three_history_windows(client, repo_root
 
 
 def test_frost_alerts_only_ever_name_outdoor_plants(client):
-    for alert in client.get("/api/v1/almanac/frost").json():
+    for alert in client.get("/api/v1/almanac/frost").json()["alerts"]:
         assert alert["specimen"]["is_outdoor"], alert
         assert alert["action"] in {"bring_indoors", "cover", "monitor"}
+
+
+def test_a_plant_the_frost_guard_cannot_judge_is_still_named(client):
+    """ADR 0018's envelope earns its keep here.
+
+    Silence from the frost guard has two very different meanings — "nothing is
+    at risk" and "I could not tell" — and a bare list of alerts renders both the
+    same way. Every unassessable entry carries the reason it could not be judged.
+    """
+    report = client.get("/api/v1/almanac/frost").json()
+    assert set(report) == {"alerts", "unassessable"}
+    for row in report["unassessable"]:
+        assert row["specimen_id"], row
+        assert row["reason"].strip(), "a plant is never set aside without a reason"
 
 
 def test_calendar_feed_is_a_parseable_vcalendar_with_stable_uids(client):
@@ -143,7 +157,7 @@ def test_a_frost_alert_reports_the_night_it_actually_names(client, repo_root):
         (repo_root / "fixtures" / "scenarios" / "frost.json").read_text()
     )
     lows = {day["date"]: day["tmin_c"] for day in scenario["days"]}
-    for alert in client.get("/api/v1/almanac/frost").json():
+    for alert in client.get("/api/v1/almanac/frost").json()["alerts"]:
         assert alert["forecast_low_c"] == lows[alert["night_of"]]
         assert (
             alert["forecast_low_c"] <= alert["threshold_c"]

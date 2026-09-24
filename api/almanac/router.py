@@ -62,6 +62,14 @@ async def get_water_balance(specimen_id: str) -> dict[str, Any]:
 
 
 @router.get("/frost")
-async def list_frost_alerts() -> list[dict[str, Any]]:
-    """Open frost alerts within the 72h lookahead."""
-    return service.frost()
+async def list_frost_alerts() -> dict[str, Any]:
+    """Open frost alerts within the 72h lookahead, and what could not be judged.
+
+    An envelope rather than a bare list (ADR 0018): a list of alerts cannot say
+    "and these three I could not assess", and an unanswerable question must not
+    reach the reader looking like a reassuring answer.
+    """
+    return {
+        "alerts": service.frost(),
+        "unassessable": service.unassessable_for_frost(),
+    }

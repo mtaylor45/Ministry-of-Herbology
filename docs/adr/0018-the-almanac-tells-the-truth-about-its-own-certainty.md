@@ -4,8 +4,8 @@ Date: 2026-09-23
 
 ## Status
 
-Proposed. The decisions below are made; the contract edits that implement them
-are **not yet applied** — see *Applying this* at the end.
+Accepted. The contract edits, the migration and the implementation landed
+together on 2026-09-24, on the maintainer's go-ahead.
 
 ## Context
 
@@ -154,17 +154,32 @@ fixtures has a cited `water_k_c` today, so the fixtures never exercise the
 uncited path — the exact path ADR 0004's warning exists for. Unit tests cover it;
 a scenario would cover it end to end.
 
-## Applying this
+## Applied
 
-The contract edits are **not in this commit**. Writing to `contracts/` was
-declined by this session's tooling as a shared-resource change, and A did not
-route around it. What is written here is the decision; the edits to
-`contracts/openapi/openapi.yaml`, `contracts/VERSION` and a new
-`contracts/schema/003_*.sql`, plus the implementation and test changes that must
-land in the same commit, need the maintainer's go-ahead.
+Landed in one commit, so main is never left with a spec and a server that
+disagree:
 
-Until then the served `/almanac/frost` and the spec agree — on the old shape —
-so main stays green and nothing is half-applied.
+| File | Change |
+| --- | --- |
+| `contracts/openapi/openapi.yaml` | `Degradation`, `UnassessableSpecimen`, `FrostReport`; the new required fields on `WaterBalance` and `FrostAlert`; `/almanac/frost` returns the envelope; `info.version` 1.2.0 |
+| `contracts/VERSION` | 1.2.0 |
+| `contracts/schema/003_weather_obs_unique.sql` | unique index on `weather_obs (site_id, time)` |
+| `api/almanac/router.py`, `service.py` | serves `{alerts, unassessable}` |
+| `api/almanac/tests/`, `tests/contract/test_mock_stack.py` | read the envelope; a new contract test asserts every unassessable entry carries a reason |
+| `web/src/lib/api/client.ts` | `Degradation`, `UnassessableSpecimen`, `FrostReport` types; `FrostAlert` gains its certainty |
+| `web/src/routes/specimen/[id]/api.ts`, `tending/+page.ts`, `tending/+page.svelte` | read `.alerts` from the envelope |
+| `fixtures/site.json` | `nws_zone` INZ050 → INZ047 |
+| `workers/weather/tests/test_nws.py` | E's discrepancy test now asserts the agreement; both zone recordings stay as the evidence |
+
+Verified: `pytest tests/contract -q` 48 passed; `pytest tests api workers -q`
+498 passed, 25 skipped; `ruff`, `black` clean; `npm run lint`, `npm test` (261),
+`npm run build` clean. `mypy` reports only the pre-existing error in
+`workers/plates/tasks.py` (K).
+
+**Workstreams F and J have open branches that predate this.** Both touch files
+this commit changed — J's `web/src/routes/specimen/[id]/api.ts` most directly.
+They merge `main` and take this shape; the conflict is small and is the reason
+the change was made before J's Almanac screen existed rather than after.
 
 ## References
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: The Ministry of Herbology API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Contract for the Ministry of Herbology. Frozen in S0 — only Workstream A
     changes this file, via an ADR. Every path declares the workstream that
@@ -393,12 +393,10 @@ paths:
       operationId: listFrostAlerts
       responses:
         '200':
-          description: Frost alerts
+          description: Frost alerts, and the plants that could not be judged
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/FrostAlert' }
+              schema: { $ref: '#/components/schemas/FrostReport' }
 
   # ------------------------------------------------------------------ tending
   /tending/rounds:
@@ -816,6 +814,42 @@ components:
       type: string
       enum: [high, medium, low, unknown]
 
+    Degradation:
+      type: object
+      description: >-
+        One named reason an answer is worth less than a measurement. `caps_at`
+        is a ceiling, not a subtraction: two doubts about the same input do not
+        make it twice as doubtful, and neither may raise the other's ceiling.
+        `detail` is a plain sentence, written to be shown to the reader as-is.
+      required: [code, detail, caps_at]
+      properties:
+        code:    { type: string, description: 'Stable machine name, e.g. et0_fallback' }
+        detail:  { type: string }
+        caps_at: { $ref: '#/components/schemas/Confidence' }
+
+    UnassessableSpecimen:
+      type: object
+      description: 'A plant whose risk could not be judged, and why.'
+      required: [specimen_id, reason]
+      properties:
+        specimen_id: { type: string, format: uuid }
+        reason:      { type: string }
+
+    FrostReport:
+      type: object
+      description: >-
+        Alerts and the plants that could not be assessed, together. A list of
+        alerts alone cannot say "and these three I could not judge", and an
+        unanswerable question must not read as a reassuring answer.
+      required: [alerts, unassessable]
+      properties:
+        alerts:
+          type: array
+          items: { $ref: '#/components/schemas/FrostAlert' }
+        unassessable:
+          type: array
+          items: { $ref: '#/components/schemas/UnassessableSpecimen' }
+
     SpecimenStatus:
       type: string
       enum: [thriving, struggling, dormant, overwintering, lost, given_away, archived]
@@ -1068,7 +1102,16 @@ components:
 
     WaterBalance:
       type: object
-      required: [specimen_id, deficit_mm, threshold_mm, is_due]
+      description: >-
+        A modelled soil-water deficit and what it is worth. Under ADR 0010
+        nothing measures the soil, so this engine alone decides whether an
+        outdoor plant is watered; a degraded input must leave here looking
+        degraded. `confidence`, `degraded` and `degradations` are required for
+        that reason — an answer without them is a degraded number wearing a
+        clean one's clothes. See ADR 0018.
+      required:
+        [specimen_id, deficit_mm, threshold_mm, is_due, applies,
+         confidence, degraded, degradations]
       properties:
         specimen_id:  { type: string, format: uuid }
         deficit_mm:   { type: number }
@@ -1077,20 +1120,58 @@ components:
         k_c:          { type: number }
         is_due:       { type: boolean }
         sensor_override_pct: { type: [number, 'null'] }
+        cover_factor: { type: number, description: 'Fraction of rain reaching the soil' }
+        status:
+          type: string
+          enum: [due, satisfied, ok]
+          description: >-
+            `satisfied` is not `ok`: a watering that was owed and that the
+            weather settled stays visible rather than vanishing.
+        satisfied_by: { type: [string, 'null'], enum: [rain, irrigation, null] }
+        applies:
+          type: boolean
+          description: >-
+            False for indoor specimens, which are watered on an interval rule
+            (Workstream G) and not by this engine. The deficit is then shown
+            for reference only.
+        note: { type: string }
+        confidence: { $ref: '#/components/schemas/Confidence' }
+        degraded:   { type: boolean }
+        degradations:
+          type: array
+          items: { $ref: '#/components/schemas/Degradation' }
+        k_c_confidence: { $ref: '#/components/schemas/Confidence' }
+        k_c_source:     { type: [string, 'null'] }
+        k_c_is_category_default:
+          type: boolean
+          description: 'ADR 0013 — an FAO-56 category default, not a measurement'
         days:
           type: array
           items:
             type: object
             properties:
-              day:           { type: string, format: date }
-              deficit_mm:    { type: number }
-              et0_mm:        { type: number }
-              precip_mm:     { type: number }
-              irrigation_mm: { type: number }
+              day:              { type: string, format: date }
+              deficit_mm:       { type: number }
+              et0_mm:           { type: number, description: 'K_c x ET0 — the demand made on the soil' }
+              reference_et0_mm: { type: [number, 'null'] }
+              et0_method:
+                type: string
+                enum: [ingested, hargreaves, unavailable]
+                description: >-
+                  ADR 0016. `unavailable` does not advance the deficit — an
+                  unknown day is not a zero-evaporation day.
+              precip_mm:        { type: number }
+              gross_precip_mm:  { type: number }
+              irrigation_mm:    { type: number }
+              is_forecast:      { type: boolean }
+              status:           { type: string, enum: [due, satisfied, ok] }
+              satisfied_by:     { type: [string, 'null'], enum: [rain, irrigation, null] }
 
     FrostAlert:
       type: object
-      required: [id, specimen, night_of, forecast_low_c, threshold_c, action]
+      required:
+        [id, specimen, night_of, forecast_low_c, threshold_c, action,
+         confidence, degraded, degradations]
       properties:
         id:             { type: string, format: uuid }
         specimen:       { $ref: '#/components/schemas/SpecimenBrief' }
@@ -1101,6 +1182,11 @@ components:
         advisory:       { type: [string, 'null'], description: 'NWS headline, if any' }
         task_id:        { type: [string, 'null'], format: uuid }
         state:          { type: string, enum: [open, resolved, expired] }
+        confidence:     { $ref: '#/components/schemas/Confidence' }
+        degraded:       { type: boolean }
+        degradations:
+          type: array
+          items: { $ref: '#/components/schemas/Degradation' }
 
     TaskBrief:
       type: object
