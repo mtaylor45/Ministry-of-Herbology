@@ -7,7 +7,12 @@ specimen's cover factor and the confidence of its coefficient must be derived
 the same way for the worker that writes ``water_balance`` rows and the endpoint
 that serves them, or the two will disagree and only one of them will be right.
 
-Nothing here decides anything. It reads, joins and converts.
+Nothing here decides anything. It reads, joins and converts — with one
+exception that has to live somewhere: :func:`active_scenario` is the single
+place that answers "which recorded weather is this deployment standing in".
+The API and the worker both come through here, so they cannot disagree about
+it; a second reading of the setting in ``api/almanac/`` is how the endpoint and
+the row it serves start describing different days.
 """
 
 from __future__ import annotations
@@ -109,18 +114,102 @@ def specimen_contexts(
     return contexts
 
 
+def active_scenario(settings: WeatherSettings | None = None) -> str | None:
+    """The scenario this deployment is standing in, or ``None`` for baseline.
+
+    ``MOH_WEATHER_SCENARIO`` (ADR 0019: an operator input, no usable default).
+    Unset in every shipped deployment, and unset is the baseline recording.
+    """
+    settings = settings or get_settings()
+    return settings.weather_scenario
+
+
+def as_of_day(settings: WeatherSettings | None = None) -> date | None:
+    """Which day of the recording counts as today, or ``None`` for its last."""
+    settings = settings or get_settings()
+    return settings.weather_scenario_day
+
+
+def weather_rows(
+    settings: WeatherSettings | None = None, *, scenario: str | None = None
+) -> list[dict[str, Any]]:
+    """The recording's day rows, exactly as the fixture writes them.
+
+    The balance wants :class:`DayWeather`; the Almanac's forecast and history
+    want ``condition`` too, which is not a term in the equation and so is not
+    on ``DayWeather``. Both come from here rather than from two loaders, so a
+    deployment under ``storm`` cannot show a balance cleared by rain beside a
+    forecast that never mentions it.
+    """
+    settings = settings or get_settings()
+    name = scenario if scenario is not None else active_scenario(settings)
+    relative = f"scenarios/{name}.json" if name else "weather/baseline_30d.json"
+    if name and not (settings.fixtures_dir / relative).exists():
+        # A typo in MOH_WEATHER_SCENARIO must not read as "fine, no weather".
+        # An Almanac with no days looks like a quiet garden, which is the one
+        # failure mode ADR 0010 says this package may never produce silently.
+        available = sorted(
+            path.stem for path in (settings.fixtures_dir / "scenarios").glob("*.json")
+        )
+        raise ValueError(
+            f"MOH_WEATHER_SCENARIO={name!r} names no recording in "
+            f"{settings.fixtures_dir / 'scenarios'}; available: "
+            f"{', '.join(available) or 'none'}"
+        )
+    payload = _load(settings.fixtures_dir, relative)
+    rows = list(payload.get("days") or []) if isinstance(payload, dict) else []
+    if scenario is None:
+        # Only when this *is* the active recording: an explicit argument may
+        # legitimately ask for a different one (the frost guard does), and the
+        # operator's day says nothing about that one.
+        _check_as_of_is_in_range(settings, rows, relative)
+    return rows
+
+
+def _check_as_of_is_in_range(
+    settings: WeatherSettings, rows: list[dict[str, Any]], relative: str
+) -> None:
+    """A day outside the recording would select no weather at all.
+
+    Which is the quiet-garden failure ADR 0010 names: an empty series advances
+    no deficit, so every plant reads as comfortable and the app says nothing.
+    A misconfigured date may not be able to produce that.
+    """
+    day = as_of_day(settings)
+    if day is None or not rows:
+        return
+    first = date.fromisoformat(rows[0]["date"])
+    last = date.fromisoformat(rows[-1]["date"])
+    if not first <= day <= last:
+        raise ValueError(
+            f"MOH_WEATHER_SCENARIO_DAY={day.isoformat()} is outside {relative}, "
+            f"which runs {first.isoformat()} to {last.isoformat()}. A day outside "
+            "the recording selects no weather, and no weather reads as a garden "
+            "that needs nothing."
+        )
+
+
 def weather_days(
     settings: WeatherSettings | None = None,
     *,
     scenario: str | None = None,
     limit: int | None = None,
+    through: date | None = None,
 ) -> list[DayWeather]:
-    """The site's daily weather, from a scenario or from the baseline."""
+    """The site's daily weather, from a scenario or from the baseline.
+
+    Truncated at ``through``, or at ``MOH_WEATHER_SCENARIO_DAY`` when that is
+    set: the water balance is a history that ends *now*, and a recording
+    replayed three days past its downpour honestly reports the deficit that has
+    rebuilt since. Standing on the day the rain fell is what shows the rain.
+    """
     settings = settings or get_settings()
-    relative = f"scenarios/{scenario}.json" if scenario else "weather/baseline_30d.json"
-    days = _load(settings.fixtures_dir, relative).get("days") or []
+    rows = weather_rows(settings, scenario=scenario)
+    end = through if through is not None else as_of_day(settings)
+    if end is not None:
+        rows = [row for row in rows if date.fromisoformat(row["date"]) <= end]
     if limit is not None:
-        days = days[-limit:]
+        rows = rows[-limit:]
     return [
         DayWeather(
             day=date.fromisoformat(day["date"]),
@@ -129,28 +218,46 @@ def weather_days(
             tmin_c=_as_float(day.get("tmin_c")),
             tmax_c=_as_float(day.get("tmax_c")),
         )
-        for day in days
+        for day in rows
     ]
 
 
 def frost_nights(
-    settings: WeatherSettings | None = None, *, scenario: str | None = "frost"
+    settings: WeatherSettings | None = None, *, scenario: str | None = None
 ) -> list[FrostNight]:
-    return [
-        FrostNight(day=day.day, low_c=day.tmin_c)
-        for day in weather_days(settings, scenario=scenario)
-        if day.tmin_c is not None
-    ]
+    """The nights the frost guard reads.
+
+    With no scenario selected this stays on ``frost``, which is where it has
+    been since S3: the baseline recording is a mild fortnight in May and a
+    frost endpoint that answers "nothing, ever" is not a mock of anything. An
+    operator who selects a scenario gets *that* one here too, so the Almanac's
+    two halves describe one week of weather rather than two.
+
+    Built from :func:`weather_rows` rather than :func:`weather_days`, and so
+    deliberately **not** cut off at ``MOH_WEATHER_SCENARIO_DAY``. The water
+    balance is a history and ends at today; the frost guard is a 72-hour
+    lookahead and is about the nights still ahead of the reader. Truncating it
+    at today would leave the guard blind to the freeze it exists to warn about,
+    and the cost of that silence is a dead plant rather than a stale number.
+    """
+    nights: list[FrostNight] = []
+    for row in weather_rows(settings, scenario=_frost_scenario(settings, scenario)):
+        low = _as_float(row.get("tmin_c"))
+        if low is None:
+            continue
+        nights.append(FrostNight(day=date.fromisoformat(row["date"]), low_c=low))
+    return nights
 
 
 def scenario_advisories(
-    settings: WeatherSettings | None = None, *, scenario: str = "frost"
+    settings: WeatherSettings | None = None, *, scenario: str | None = None
 ) -> list[Any]:
     """The advisories a scenario declares, as ``sources.base.Advisory`` rows."""
     from .sources.base import Advisory, parse_time
 
     settings = settings or get_settings()
-    payload = _load(settings.fixtures_dir, f"scenarios/{scenario}.json")
+    name = _frost_scenario(settings, scenario)
+    payload = _load(settings.fixtures_dir, f"scenarios/{name}.json")
     return [
         Advisory(
             external_id=str(row.get("external_id") or ""),
@@ -162,6 +269,11 @@ def scenario_advisories(
         )
         for row in payload.get("advisories") or []
     ]
+
+
+def _frost_scenario(settings: WeatherSettings | None, scenario: str | None) -> str:
+    """An explicit argument wins, then the operator's scenario, then ``frost``."""
+    return scenario or active_scenario(settings) or "frost"
 
 
 def _display_name(specimen: dict[str, Any], plant: dict[str, Any]) -> str:

@@ -358,7 +358,7 @@ def run_balance(
         )
         effective_rain = cover_factor * entry.precip_mm
         now_due = is_watering_due(deficit, capacity)
-        status, satisfied_by = _day_status(
+        status, satisfied_by = day_status(
             was_due=was_due,
             now_due=now_due,
             rain_mm=effective_rain,
@@ -408,7 +408,7 @@ def run_balance(
     )
 
 
-def _day_status(
+def day_status(
     *, was_due: bool, now_due: bool, rain_mm: float, irrigation_mm: float
 ) -> tuple[str, str | None]:
     """What today's row says happened, in the plan's vocabulary.
@@ -416,6 +416,14 @@ def _day_status(
     "Satisfied" is not "no longer due". It is the specific, visible state of a
     watering that *was* owed and that the weather settled — the plan is explicit
     that the task must not simply vanish.
+
+    Public because the live Almanac path replays it over stored
+    ``water_balance`` rows: the table keeps no ``status`` column, so the one
+    rule that decides "satisfied" has to be reachable from there rather than
+    written a second time (ADR 0018's whole complaint about second copies).
+
+    ``rain_mm`` is rain that reached the soil — already multiplied by the
+    cover factor. Passing gross rainfall here waters a plant under a roof.
     """
     if now_due:
         return "due", None
@@ -747,19 +755,17 @@ async def evaluate_water_balance(
         if series.days:
             last = series.days[-1]
             rows.append(
-                {
-                    "day": last.day,
-                    "specimen_id": context.specimen_id,
-                    "deficit_mm": series.deficit_mm,
-                    "capacity_mm": series.capacity_mm,
-                    "threshold_mm": series.threshold_mm,
-                    "et0_mm": last.demand_mm,
-                    "k_c": series.k_c.effective,
-                    "precip_mm": last.precip_mm,
-                    "irrigation_mm": last.irrigation_mm,
-                    "cover_factor": context.cover_factor,
-                    "sensor_override_pct": context.sensor_override_pct,
-                }
+                # Including the confidence and the named reasons for it (ADR
+                # 0020 §4). A stored deficit that cannot say what it was worth
+                # is the same defect as an uncited care value, one table along.
+                store.water_balance_row(
+                    day=last.day,
+                    specimen_id=context.specimen_id,
+                    series=series,
+                    last=last,
+                    cover_factor=context.cover_factor,
+                    sensor_override_pct=context.sensor_override_pct,
+                )
             )
         summary.append(
             {

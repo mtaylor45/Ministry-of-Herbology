@@ -190,6 +190,24 @@ def forecast_not_observed(days: int) -> Degradation:
     )
 
 
+def certainty_not_recorded() -> Degradation:
+    """A stored row from before ADR 0020 §4, or from a worker that skipped it.
+
+    Migration 004 defaults ``confidence`` to NULL and is never back-filled, so
+    an empty column means *it did not say* — not *it was certain*. Reading it
+    as ``medium`` is the exact laundering ADR 0018 was written against, one
+    table further down.
+    """
+    return Degradation(
+        code="certainty_not_recorded",
+        detail=(
+            "This deficit was stored without the confidence it was computed "
+            "with, so what it was worth at the time cannot be recovered."
+        ),
+        caps_at="unknown",
+    )
+
+
 def secondary_source(source: str) -> Degradation:
     """The contract's primary source was unreachable and NWS answered instead."""
     return Degradation(
