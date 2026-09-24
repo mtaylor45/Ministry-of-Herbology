@@ -140,7 +140,7 @@ export const UNSCHEDULED_SILENCE =
   'This build of the API does not report the plants it could not schedule, so this screen cannot ' +
   'tell you whether any were left off. A plant with no watering interval generates no task, and a ' +
   'plant with no task looks exactly like a plant that needs nothing. Added by Workstream G and ' +
-  'asked of Workstream A; until the contract carries it, read the rounds below as "what was ' +
+  'asked of Workstream A; until the contract carries it, read the round above as "what was ' +
   'scheduled", not as "every plant in the house".';
 
 /** Do these tasks carry their own certainty?

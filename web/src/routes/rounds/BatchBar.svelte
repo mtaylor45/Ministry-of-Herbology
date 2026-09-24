@@ -46,6 +46,7 @@
       plain="Select every task due"
       meta={summary}
       disabled={busy || total === 0}
+      donePlain="All selected"
       onchange={() => onselectall?.()}
     />
   </div>
@@ -68,8 +69,14 @@
     {/if}
   </div>
 
+  <!-- Plain-only, deliberately, and it is the one label on this screen that
+       does not carry its themed half. `Label` paints the plain half in
+       `--moh-ink-muted`, which on a filled primary button is 1.26:1 against
+       `--moh-accent` — measured in the browser, and a WCAG AA failure at any
+       size. A themed word nobody can read beside an unreadable plain one is
+       rule 7 broken twice, so the themed half waits for Workstream I's fix
+       (raised in the pull request, with the gallery's own two instances). -->
   <Button
-    themed="Set it down in the ledger"
     plain={batchButtonPlain(selected)}
     icon="check"
     full

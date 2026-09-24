@@ -13,6 +13,11 @@
    *  there is no soil probe anywhere in this house to catch it if it does not.
    */
   import { Button, TaskCheckbox } from '$ui';
+  // `donePlain` is overridden throughout: a ticked box here means *selected for
+  // the batch*, not *done*. Attribution happens at completion (ADR 0008), so
+  // the tick cannot be the completion itself. `TaskCheckbox` still strikes the
+  // text through when it is checked, which reads as "finished" — raised with
+  // Workstream I in the pull request rather than restyled from out here.
   import Caveats from '../shared/Caveats.svelte';
   import type { Task } from './api';
   import { instructionNote, taskConfidence, taskMeta } from './tasks';
@@ -48,6 +53,7 @@
     disabled={disabled || busy}
     name="task"
     value={task.id}
+    donePlain="Selected"
     onchange={(checked) => onselect?.(checked)}
   />
 

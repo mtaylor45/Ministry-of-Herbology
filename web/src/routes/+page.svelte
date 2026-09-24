@@ -187,7 +187,7 @@
           icon="check"
           themed="The grounds are content"
           plain="Nothing is due today"
-          body="No task is outstanding. Anything the rain settled is below, and any plant nothing is scheduled for is named further down — an empty list here means the round is done, not that the house is unaccounted for."
+          body="Nothing is outstanding, which means the round is done rather than that the house is unaccounted for: waterings something else settled, and plants nothing is scheduled for, each get a section of their own whenever there are any."
         />
       {/if}
     </Card>
