@@ -30,6 +30,20 @@ def _fixture(repo_root, relative):
     return json.loads((repo_root / "fixtures" / relative).read_text())
 
 
+def rain_day(scenario) -> int:
+    """The index of the scenario's soaking, read from the days themselves.
+
+    Hardcoded here until S5, where lengthening the storm's dry spell moved the
+    wet day and these tests went red for a reason that had nothing to do with
+    the engine. The fixture declares the index too, in ``expect.rain_day_index``,
+    and the two are checked against each other below: a fixture whose prose and
+    whose weather disagree is worse than one that is merely wrong.
+    """
+    wet = [index for index, day in enumerate(scenario["days"]) if day["precip_mm"] > 0]
+    assert len(wet) == 1, f"the storm is one soaking, not {len(wet)}"
+    return wet[0]
+
+
 @pytest.fixture
 def world(repo_root):
     species = {s["id"]: s for s in _fixture(repo_root, "species/species.json")}
@@ -75,7 +89,7 @@ def test_drought_dries_containers_before_open_ground(repo_root, world):
             species[specimen["species_id"]],
             locations[specimen["location_id"]],
         )
-        assert due_on, f"{specimen['id']} never came due in a 14-day drought"
+        assert due_on, f"{specimen['id']} never came due in the drought"
         first_due[specimen_id] = due_on[0]
 
     assert first_due[LEMON_ON_TERRACE] < first_due[ROSE] < first_due[LAVENDER_HEDGE], (
@@ -107,9 +121,21 @@ def test_drought_meets_its_stated_deadline(repo_root, world, specimen_id):
     )
 
 
+def test_the_storm_fixture_agrees_with_itself(repo_root):
+    """`expect.rain_day_index` is prose about the weather; check it against it."""
+    scenario = _fixture(repo_root, "scenarios/storm.json")
+    assert scenario["expect"]["rain_day_index"] == rain_day(scenario)
+    assert rain_day(scenario) == len(scenario["days"]) - 1, (
+        "the storm must end on the wet day: the balance reports the state of "
+        "its newest day, so a scenario that ran on past the rain would report "
+        "'ok' and the satisfied state would never reach a screen"
+    )
+
+
 def test_storm_rain_relieves_open_air_plants(repo_root, world):
     species, _locations, specimens = world
     scenario = _fixture(repo_root, "scenarios/storm.json")
+    wet = rain_day(scenario)
     specimen = specimens[LEMON_ON_TERRACE]
     capacity = capacity_mm(specimen["in_container"], specimen["container_litres"])
     k_c = species[specimen["species_id"]]["water_k_c"]
@@ -117,7 +143,7 @@ def test_storm_rain_relieves_open_air_plants(repo_root, world):
     deficit = 0.0
     before = after = None
     for index, day in enumerate(scenario["days"]):
-        if index == 6:
+        if index == wet:
             before = deficit
         deficit = step_deficit(
             deficit,
@@ -127,14 +153,38 @@ def test_storm_rain_relieves_open_air_plants(repo_root, world):
             k_c,
             capacity,
         )
-        if index == 6:
+        if index == wet:
             after = deficit
 
     assert before is not None and is_watering_due(
         before, capacity
-    ), "six dry days should have left the lemon due for water"
+    ), "the dry spell should have left the lemon due for water"
     assert after == 0.0, "38 mm of rain should clear the deficit entirely"
     assert not is_watering_due(after, capacity)
+
+
+def test_storm_rain_does_not_relieve_a_plant_that_was_never_thirsty(repo_root, world):
+    """ "Satisfied" is a watering the sky did for you. This one was never owed.
+
+    The drought-adapted lavender hedge does not cross its threshold in the
+    storm's dry spell, so the rain settles nothing it owed. An engine that
+    reported it as satisfied would be claiming credit for work nobody needed —
+    and would make "satisfied" useless as a signal, because it would no longer
+    distinguish a task the weather cleared from a task that never existed.
+    """
+    species, locations, specimens = world
+    scenario = _fixture(repo_root, "scenarios/storm.json")
+    specimen = specimens[LAVENDER_HEDGE]
+    location = locations[specimen["location_id"]]
+    assert not location["is_covered"], "fixture drift: the hedge is under open sky"
+
+    due_on, _, _ = run_scenario(
+        scenario, specimen, species[specimen["species_id"]], location
+    )
+    assert not due_on, (
+        "a drought-adapted plant in the ground must not be nagged after ten "
+        f"days — it came due on {due_on}"
+    )
 
 
 def test_storm_rain_never_reaches_a_covered_porch(repo_root, world):
@@ -151,7 +201,7 @@ def test_storm_rain_never_reaches_a_covered_porch(repo_root, world):
     assert is_watering_due(
         deficit, capacity
     ), "the porch lemon must still be thirsty after the storm"
-    assert 6 in due_on, "it was due on the rain day and stayed due"
+    assert rain_day(scenario) in due_on, "it was due on the rain day and stayed due"
 
 
 def test_watering_is_never_negative_or_beyond_capacity(repo_root, world):

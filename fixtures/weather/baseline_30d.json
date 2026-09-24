@@ -237,10 +237,10 @@
     },
     {
       "date": "2026-05-30",
-      "tmin_c": 16.3,
-      "tmax_c": 25.3,
-      "precip_mm": 6.0,
-      "et0_mm": 3.34,
+      "tmin_c": 16.0,
+      "tmax_c": 19.0,
+      "precip_mm": 32.0,
+      "et0_mm": 2.2,
       "condition": "rain"
     }
   ]
