@@ -79,7 +79,7 @@ jobs:
         # tests/ is L's suite; api/ and workers/ hold each workstream's own
         # tests, which rule 2 requires them to keep inside their directory.
         # Collecting only tests/ meant those never ran in CI at all.
-        run: pytest tests api workers -q
+        run: pytest tests api workers scripts -q
 
   web:
     name: Web
@@ -130,4 +130,76 @@ jobs:
           file: infra/docker/web.Dockerfile
           push: false
           tags: herbology/web:${{ github.sha }}
-      # Pushing to Harbor needs registry credentials; wired up in S1 by B.
+      # The worker image was not built here until now, which meant a change to
+      # its Dockerfile — or to the entrypoint both it and the API copy in —
+      # could only be found by deploying.
+      - name: Build worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/worker.Dockerfile
+          push: false
+          tags: herbology/worker:${{ github.sha }}
+      # No push, and no registry credentials anywhere in this workflow. Under
+      # ADR 0019 the project operates no registry: this job exists to keep the
+      # Dockerfiles honest, and an operator pushes to their own with
+      # `make push MOH_REGISTRY=...`.
+
+  stack:
+    name: Deployment stack
+    runs-on: ubuntu-latest
+    needs: contract
+    steps:
+      - uses: actions/checkout@v4
+      - name: The stack file renders with every required variable supplied
+        env:
+          # Documentation-reserved names. Nothing here is reachable, and
+          # nothing here is a credential — the six secrets are swarm secrets
+          # the operator creates, and the stack refers to them by name only.
+          MOH_REGISTRY: registry.example.net/ministry-of-herbology
+          MOH_IMAGE_TAG: ci-${{ github.sha }}
+          MOH_PUBLIC_BASE_URL: https://herbology.example.net
+          MOH_NWS_USER_AGENT: ministry-of-herbology (ci@example.net)
+        run: docker compose -f infra/stack/docker-stack.yml config >/dev/null
+      - name: And fails, by name, without each of them
+        run: |
+          set -u
+          for missing in MOH_REGISTRY MOH_IMAGE_TAG MOH_PUBLIC_BASE_URL MOH_NWS_USER_AGENT; do
+            # A command substitution is already a subshell, so the exports go
+            # no further than this iteration. MOH_NWS_USER_AGENT contains a
+            # space and parentheses, which is exactly the shape that catches
+            # people out, so it is quoted rather than word-split.
+            output=$(
+              export MOH_REGISTRY=registry.example.net/moh
+              export MOH_IMAGE_TAG=ci
+              export MOH_PUBLIC_BASE_URL=https://example.net
+              export MOH_NWS_USER_AGENT="moh (ci@example.net)"
+              unset "$missing"
+              docker compose -f infra/stack/docker-stack.yml config 2>&1 >/dev/null
+            ) || true
+            case "$output" in
+              *"$missing"*) echo "ok: $missing is required and named" ;;
+              *) echo "$missing did not fail by name. Got: $output"; exit 1 ;;
+            esac
+          done
+      - name: The nginx configuration is valid
+        run: |
+          # A throwaway certificate, generated here and never leaving the
+          # runner, only so that nginx -t can read the ssl_certificate lines.
+          # The operator supplies the real one; see docs/deploy/README.md.
+          mkdir -p /tmp/moh-tls
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /tmp/moh-tls/key.pem -out /tmp/moh-tls/cert.pem \
+            -subj '/CN=ci.example.net' 2>/dev/null
+          docker run --rm \
+            -v "$PWD/infra/stack/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$PWD/infra/stack/nginx/moh-proxy.conf:/etc/nginx/moh-proxy.conf:ro" \
+            -v /tmp/moh-tls/cert.pem:/run/secrets/moh_tls_cert:ro \
+            -v /tmp/moh-tls/key.pem:/run/secrets/moh_tls_key:ro \
+            nginx:1.27-alpine nginx -t
+      - name: The shell scripts parse
+        run: |
+          for script in scripts/*.sh scripts/lib/*.sh infra/docker/entrypoint.sh; do
+            sh -n "$script" || exit 1
+          done
+          echo "all shell scripts parse"

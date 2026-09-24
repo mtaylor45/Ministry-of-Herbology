@@ -926,6 +926,64 @@ the token secret non-blank; did Home Assistant's MQTT integration connect
 `worker-hub` running at all. The Ministry Office screen reports each of these
 separately rather than as one "broken".
 
+### 502 on everything, but the backends are healthy and DNS resolves
+
+Symptom: Nginx answers `/healthz` fine, `nslookup api` inside the Nginx
+container returns an address, and yet every proxied request logs
+`connect() failed (113: Host is unreachable)`. Connecting to a *task* address
+works:
+
+```sh
+NG=$(docker ps -qf name=moh_nginx | head -1)
+docker exec $NG nslookup tasks.api 127.0.0.11     # the individual task IPs
+docker exec $NG wget -qO- http://<one of those>:8000/api/v1/healthz
+```
+
+If the task address works and the service address does not, the kernel has no
+IPVS. Swarm's default `endpoint_mode: vip` gives each service one virtual
+address and load-balances it with IPVS; without the `ip_vs` module the DNS
+answer is still handed out and the packets go nowhere. Check:
+
+```sh
+lsmod | grep ip_vs
+ls /proc/net/ip_vs
+```
+
+Load it (`modprobe ip_vs`, and make it persistent in `/etc/modules-load.d/`),
+or, if you cannot — a container-optimised or minimal-kernel host, some VPS
+images, a VM without the module — switch the affected services to DNS
+round-robin, which resolves straight to task addresses and needs no IPVS:
+
+```sh
+for s in api web db redis mosquitto; do
+  docker service update --endpoint-mode dnsrr "moh_$s"
+done
+```
+
+The stack ships `vip` because it is the swarm default and the right answer on
+an ordinary kernel. `dnsrr` loses the stable per-service address and leaves
+load balancing to the client's DNS caching, which for this application is a
+fair trade.
+
+### A service is stuck, and `make stack-deploy` does not move it
+
+```sh
+docker service inspect moh_worker-weather --format '{{.UpdateStatus.State}}'
+```
+
+`rollback_paused` or `rollback_completed` means `failure_action: rollback` did
+its job — the new tasks never became healthy, so swarm put the previous
+version back. That is what you want, except when the previous version is also
+broken, which is the case the first time you deploy a fix. The service then
+sits on the old image and re-deploying the same tag changes nothing, because
+the spec is pinned to the old digest. Push the new image explicitly:
+
+```sh
+docker service update --image "$MOH_REGISTRY/moh-worker:$MOH_IMAGE_TAG" moh_worker-weather
+```
+
+Tag each build distinctly — which `make push` does — and this is rare.
+
 ### Something is wrong and you want to start over
 
 Volumes and secrets survive `docker stack rm`. To remove the data too — and
@@ -941,32 +999,82 @@ docker volume rm moh_db-data moh_redis-data moh_mosquitto-data moh_uploads moh_a
 
 ## 16. What has and has not been executed
 
-ADR 0019 says a deployment document nobody has executed is a wish list, so here
-is the honest accounting, as of the branch this guide landed on.
+ADR 0019 says a deployment document nobody has executed is a wish list, so
+here is the honest accounting. This guide was walked end to end on a
+single-node swarm with a stand-in registry, and four defects in it were found
+and fixed that way. What follows is what that proved and what it did not.
 
-**Executed, in a container environment, and working:**
+### Executed, and working
 
-* The migration runner, against TimescaleDB 2.17/pg16 — `status`, `apply`,
-  `apply --dry-run` and `baseline`, on both an empty database and one built by
-  `docker-entrypoint-initdb.d`. Including the failure paths: a migration that
-  errors halfway leaves no table and no ledger row, and a file whose checksum
-  has drifted is refused.
-* Backup and restore, end to end, with 500 weather observations, a site, a
-  specimen and a materialised continuous aggregate. All of it came back:
-  3 hypertables, 3 continuous aggregates with their rows, and the background
-  jobs.
-* The Nginx configuration — `nginx -t` passes with a certificate mounted where
-  the stack mounts one.
-* The secret-file entrypoint, including percent-encoding a password containing
-  `/`, `+` and `@`, and clearing both the password and the `_FILE` pointer from
-  the environment before exec.
-* Stack file interpolation, including each of the four required variables
-  failing by name when unset.
+* **Building and pushing all three images**, and deploying them from a
+  registry.
+* **Every `docker secret create` line in [§6](#6-create-the-secrets)**, run
+  verbatim, including the two-secret MQTT dance and the blank
+  `moh_ha_token`.
+* **`make preflight` and `make stack-deploy`**, from an `.env.deploy` written
+  by copying [§7](#7-write-your-envdeploy).
+* **Six of the ten services healthy and staying healthy**: `db`, `redis`,
+  `mosquitto`, `nginx`, `api` (2 replicas) and `web` (2 replicas).
+* **The whole front door.** Plain HTTP redirects 308 to HTTPS; `/healthz`
+  answers; the security headers are present; and over TLS both
+  `https://.../api/v1/healthz` and the web app return 200. An actual data
+  endpoint, `/api/v1/specimens`, returns `{"items":[],...}` — the API in live
+  mode, through Nginx, against the real database.
+* **[§9](#9-first-run-the-schema), the first-run migration**, against the
+  deployed stack. `scripts/migrate.sh` found the database task by itself and
+  applied all three files.
+* **[§13](#13-backup-and-restore), backup and restore**, against the deployed
+  stack: `make backup` then `make restore-check`, with the rows and all the
+  TimescaleDB machinery coming back.
 
-**Verified as far as this environment allowed, and no further:**
+### Not working, and not something this guide can fix
 
-* A full `docker stack deploy` of all nine services. See the pull request for
-  exactly how far this got and what stopped it.
+**The four Arq workers do not start.** They exit with
+
+```
+redis.exceptions.ConnectionError: Error 111 connecting to localhost:6379
+```
+
+because no worker declares `redis_settings` on its `WorkerSettings` class, so
+Arq uses its default of `localhost:6379`. `MOH_REDIS_URL` is documented in
+`.env.example` and set by both the dev compose and this stack, and **nothing
+reads it**. The same is true in local development; it has simply never
+surfaced there, because nothing exercises a worker against a real Redis.
+
+This is application code in `workers/*/tasks.py`, which belongs to Workstreams
+D, E, F and K, not to the deployment. It is raised in the pull request for
+Workstream A to route. Until it is fixed, a deployment serves the API, the web
+app and the database correctly, and does no background work: no weather
+ingest, no taxon resolution, no Home Assistant polling, no plates.
+
+### Verified only under a caveat
+
+**Service virtual addresses.** The machine this was walked on runs a minimal
+kernel with no `ip_vs` module, so swarm's default VIP load balancing
+black-holes every service-to-service connection while DNS still answers. The
+overlay data plane itself is fine: task addresses work. Switching the five
+services to `endpoint_mode: dnsrr` made everything above pass. On an ordinary
+Linux host with `ip_vs` present, the shipped `vip` mode is the right default
+and none of this applies — but it means VIP mode specifically has not been
+exercised here. See the troubleshooting entry on 502s if you meet it.
+
+**The images were built through a TLS-intercepting proxy.** The Dockerfiles in
+this repository were used unmodified for what they contain; the build in this
+environment needed the proxy's CA added, which was done in a throwaway copy
+rather than in the tree. Nothing about that reaches what you build.
+
+### Not executed at all
+
+* **A multi-node swarm.** Everything ran on one node, so the placement
+  constraints, `--with-registry-auth` and host-mode ports across several nodes
+  are reasoned about rather than demonstrated.
+* **A real certificate.** A self-signed one was used throughout, so the ACME
+  paths in [§5](#5-certificates) and the renewal procedure in
+  [§12](#12-upgrading) are untested.
+* **A real Home Assistant.** [§11](#11-connecting-home-assistant) is written
+  from the adapter's configuration and Home Assistant's documented UI, not
+  from a running instance.
+* **An upgrade between two real releases**, and a rollback.
 
 If you hit something this guide does not cover, that is a gap worth reporting
 rather than working around silently.
