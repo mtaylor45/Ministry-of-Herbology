@@ -175,7 +175,10 @@ async def poll_home_assistant(
 
     error = _error_for(result, due, problems, secrets)
     finished_at = datetime.now(UTC)
-    detail = result.to_dict()
+    # The report and the ``job_run`` row carry the *redacted* error, not the
+    # fetcher's own. ``PollResult.error`` is whatever Home Assistant or httpx
+    # said, and both can quote a URL somebody put credentials in.
+    detail = {**result.to_dict(), "error": error, "ok": result.ok and not error}
     if connection is not None:
         kind, name = HA_INTEGRATION
         if result.ok:
