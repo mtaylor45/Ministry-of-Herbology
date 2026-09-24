@@ -141,9 +141,7 @@ export function caveatSummary(payload: Assessment | null | undefined): string {
 
 /** The weakest confidence of several panels — what a screen built of them is
  *  worth as a whole, since a chain is worth its weakest link. */
-export function weakest(
-  ...payloads: (Assessment | null | undefined)[]
-): Confidence | undefined {
+export function weakest(...payloads: (Assessment | null | undefined)[]): Confidence | undefined {
   const stated = payloads.filter(reportsItsOwnConfidence).map((p) => p?.confidence);
   if (!stated.length) return undefined;
   return CONFIDENCE_ORDER[Math.max(...stated.map((c) => rank(c)))];

@@ -32,6 +32,23 @@ export async function get<T>(path: string, fetcher: Fetcher): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** A write, with the same failure vocabulary as a read.
+ *
+ *  Morning Rounds is the first screen in this workstream that writes anything,
+ *  and a completion that silently fails is worse than one that refuses: the
+ *  reader walks away believing the plant is watered. Every caller therefore
+ *  gets an `ApiError` it has to deal with, never a quietly discarded response.
+ */
+export async function post<T>(path: string, body: unknown, fetcher: Fetcher): Promise<T> {
+  const response = await fetcher(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new ApiError(path, response.status, response.statusText);
+  return (await response.json()) as T;
+}
+
 /** A panel's data, or the plain reason it is missing. Never both, never neither.
  *
  *  A screen asks several endpoints for its panels. One of them failing must
@@ -54,6 +71,8 @@ export function reason(cause: unknown): string {
     if (cause.status === 404) return 'The greenhouse has no record of this yet.';
     if (cause.status === 405 || cause.status === 501)
       return 'The API does not answer this yet — the screen is ready, the endpoint is not.';
+    if (cause.status === 422)
+      return 'The greenhouse would not accept that — something in the request was not valid.';
     if (cause.status >= 500) return `The greenhouse answered with an error (${cause.status}).`;
     return `The greenhouse refused the request (${cause.status}).`;
   }

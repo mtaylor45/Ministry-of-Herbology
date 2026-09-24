@@ -7,6 +7,10 @@
 import { STATUS, type Status } from '$ui';
 import type { EnrichmentState, SpecimenStatus } from './api';
 
+// Shared with Morning Rounds, which reads the same task types off the same
+// endpoint. Re-exported so this screen's imports do not have to move.
+export { TASK_TYPES, formatDate, taskTypeLabel } from '../../shared/labels';
+
 /** The Register's status vocabulary. Three of the seven already live in `$ui`;
  *  the other four are this screen's, paired the same way. */
 const EXTRA_STATUSES: Record<string, Status> = {
@@ -67,19 +71,6 @@ export const LOG_KINDS: Record<string, { themed: string; plain: string }> = {
   prune: { themed: 'Pruned back', plain: 'Pruned' },
   relocate: { themed: 'Moved house', plain: 'Moved to another location' },
   note: { themed: 'Marginalia', plain: 'Note' },
-};
-
-export const TASK_TYPES: Record<string, string> = {
-  water: 'Water',
-  fertilize: 'Fertilize',
-  mist: 'Mist',
-  prune: 'Prune',
-  repot: 'Repot',
-  inspect: 'Inspect for pests',
-  bring_indoors: 'Bring indoors',
-  return_outdoors: 'Put back outside',
-  cover: 'Cover against frost',
-  rotate: 'Rotate',
 };
 
 export const CARE_STRATEGIES: Record<string, { themed: string; plain: string }> = {
@@ -150,12 +141,4 @@ export function enrichmentProgress(
         busy: false,
       };
   }
-}
-
-/** A date as a person writes it, or a plain phrase when there is no date. */
-export function formatDate(value: string | null | undefined, fallback = 'Not recorded'): string {
-  if (!value) return fallback;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return fallback;
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 }

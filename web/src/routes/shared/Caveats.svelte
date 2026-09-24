@@ -13,6 +13,7 @@
    *  here is how six wordings of one caveat come to exist. */
   import StatusPill from '$ui/StatusPill.svelte';
   import Icon from '$ui/Icon.svelte';
+  import type { Status } from '$ui/status';
   import type { Assessment } from './assessment';
   import {
     capSentence,
@@ -40,12 +41,23 @@
      *  are silent and why, so it belongs to the screen rather than here; this
      *  default is the Almanac's, which is where the notice was first needed. */
     silentNotice = ALMANAC_SILENCE,
+    /** The pill for this confidence level. The default vocabulary is about
+     *  *readings* — "read through cloud" — which is right for a forecast and
+     *  wrong for a watering worked out from an uncited interval, so a screen
+     *  with a different kind of answer passes its own words. */
+    status,
+    /** `heading` puts "Why it may be wrong" in the page outline, which is right
+     *  when the block is one panel on a screen. In a list of eight tasks it is
+     *  eight identical headings naming no plant, so a row passes `text`. */
+    labelAs = 'heading',
   }: {
     payload: Assessment | null | undefined;
     /** Plain name of the thing being assessed: "This forecast". */
     what: string;
     noticeWhenSilent?: boolean;
     silentNotice?: string;
+    status?: Status;
+    labelAs?: 'heading' | 'text';
   } = $props();
 
   const reports = $derived(reportsItsOwnConfidence(payload));
@@ -56,11 +68,15 @@
   <div class="assessment" class:degraded={reasons.length > 0}>
     <p class="level">
       <span class="what">{what}</span>
-      <StatusPill status={measurementConfidence(payload?.confidence)} />
+      <StatusPill status={status ?? measurementConfidence(payload?.confidence)} />
     </p>
 
     {#if reasons.length}
-      <h3 class="why">Why it may be wrong</h3>
+      {#if labelAs === 'heading'}
+        <h3 class="why">Why it may be wrong</h3>
+      {:else}
+        <p class="why">Why it may be wrong</p>
+      {/if}
       <ul>
         {#each reasons as reason (reason.code)}
           <li>
@@ -105,6 +121,7 @@
   }
   .why {
     margin: var(--moh-space-3) 0 var(--moh-space-2);
+    font-weight: 700;
     font-family: var(--moh-font-body);
     font-size: var(--moh-text-sm);
     text-transform: uppercase;
