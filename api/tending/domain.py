@@ -280,9 +280,13 @@ class Occurrence:
     status: str = "due"
     satisfied_by: str | None = None
     amount_ml: int | None = None
-    priority: str = "normal"
     confidence: str = "high"
     caveats: tuple[Caveat, ...] = ()
+
+    @property
+    def priority(self) -> str:
+        """Derived, not passed. A frost task is urgent wherever it was built."""
+        return "urgent" if self.rule.task_type in TIMED_TASK_TYPES else "normal"
 
     @property
     def task_id(self) -> str:
@@ -475,9 +479,6 @@ def generate(
                     amount_ml=rule.amount_ml
                     or (
                         water_amount_ml(subject) if rule.task_type == "water" else None
-                    ),
-                    priority=(
-                        "urgent" if rule.task_type in TIMED_TASK_TYPES else "normal"
                     ),
                     # An interval rule is a schedule, not a measurement. It is
                     # only ever as good as the interval it was configured with,

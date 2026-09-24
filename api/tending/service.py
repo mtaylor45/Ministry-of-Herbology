@@ -17,6 +17,7 @@ same function on a schedule, and these endpoints become pure reads.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
@@ -34,6 +35,33 @@ HORIZON_DAYS = 30
 FEED_LOOKBACK_DAYS = 14
 
 
+@dataclass(slots=True)
+class Generated:
+    """What one generation pass produced besides the stored rows.
+
+    ``certainty`` exists because the frozen ``task`` table has nowhere to keep
+    it. ADR 0018 put ``confidence``, ``degraded`` and ``degradations`` on
+    Workstream E's *responses*; the schema behind them was never given the same
+    columns, so a task's certainty cannot survive a round trip through Postgres.
+    Generation runs on every read anyway, so the freshly computed values are
+    carried across and merged onto the rows before they are serialised — the
+    same in both stores, so neither can drift.
+
+    The honest fix is three columns on ``task``, and it is asked of Workstream A
+    in the pull request rather than worked around any further than this.
+    """
+
+    unscheduled: dict[str, list[str]] = field(default_factory=dict)
+    certainty: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def merge_into(self, rows: list[Record]) -> list[Record]:
+        for row in rows:
+            known = self.certainty.get(str(row["id"]))
+            if known:
+                row.update(known)
+        return rows
+
+
 def _day_bounds(on: date) -> tuple[datetime, datetime]:
     start = datetime.combine(on, time.min, tzinfo=UTC)
     return start, start + timedelta(days=1)
@@ -41,7 +69,7 @@ def _day_bounds(on: date) -> tuple[datetime, datetime]:
 
 async def generate_tasks(
     repo: TendingRepository, *, today: date | None = None
-) -> dict[str, list[str]]:
+) -> Generated:
     """Materialise every occurrence due between each plant's anchor and the horizon.
 
     Returns the plants that could not be scheduled, and why — never an empty
@@ -82,7 +110,17 @@ async def generate_tasks(
             )
 
     await repo.upsert_tasks(rows)
-    return unscheduled
+    return Generated(
+        unscheduled=unscheduled,
+        certainty={
+            str(row["id"]): {
+                "confidence": row["confidence"],
+                "degraded": row["degraded"],
+                "degradations": row["degradations"],
+            }
+            for row in rows
+        },
+    )
 
 
 async def morning_rounds(
@@ -90,10 +128,10 @@ async def morning_rounds(
 ) -> dict[str, Any]:
     """``GET /tending/rounds`` — today, grouped the way the screen reads it."""
     day = on or datetime.now(UTC).date()
-    unscheduled = await generate_tasks(repo, today=day)
+    generated = await generate_tasks(repo, today=day)
     _, end = _day_bounds(day)
 
-    rows = await repo.tasks(TaskQuery(due_before=end))
+    rows = generated.merge_into(await repo.tasks(TaskQuery(due_before=end)))
     due = [schemas.task_out(row) for row in rows if row["status"] == "due"]
     satisfied = [
         schemas.task_out(row)
@@ -113,7 +151,7 @@ async def morning_rounds(
         # pull request alongside the certainty fields on ``Task``.
         "unscheduled": [
             {"specimen_id": specimen_id, "reason": reason}
-            for specimen_id, reasons in sorted(unscheduled.items())
+            for specimen_id, reasons in sorted(generated.unscheduled.items())
             for reason in reasons
         ],
     }
@@ -128,8 +166,9 @@ def greeting(due_count: int) -> str:
 
 
 async def list_tasks(repo: TendingRepository, query: TaskQuery) -> list[dict[str, Any]]:
-    await generate_tasks(repo)
-    return [schemas.task_out(row) for row in await repo.tasks(query)]
+    generated = await generate_tasks(repo)
+    rows = generated.merge_into(await repo.tasks(query))
+    return [schemas.task_out(row) for row in rows]
 
 
 async def complete(
@@ -141,8 +180,9 @@ async def complete(
     a different route would eventually log its events differently, and the
     history is the feature.
     """
-    await generate_tasks(repo)
-    return [schemas.task_out(row) for row in await repo.complete(task_ids, completion)]
+    generated = await generate_tasks(repo)
+    rows = generated.merge_into(await repo.complete(task_ids, completion))
+    return [schemas.task_out(row) for row in rows]
 
 
 # ----------------------------------------------------------------- feed
@@ -184,11 +224,13 @@ async def render_feed(
         return None
 
     now = now or datetime.now(UTC)
-    await generate_tasks(repo, today=now.date())
+    generated = await generate_tasks(repo, today=now.date())
     horizon = now + timedelta(days=HORIZON_DAYS + 1)
     since = now - timedelta(days=FEED_LOOKBACK_DAYS)
 
-    rows = await repo.tasks(TaskQuery(due_after=since, due_before=horizon))
+    rows = generated.merge_into(
+        await repo.tasks(TaskQuery(due_after=since, due_before=horizon))
+    )
     filters = feed.get("filters") or {}
     events = [schemas.ics_task(row) for row in rows if matches_filters(row, filters)]
     document = ics.render(

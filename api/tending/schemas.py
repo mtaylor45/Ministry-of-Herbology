@@ -107,9 +107,15 @@ def task_out(row: dict[str, Any]) -> dict[str, Any]:
         "completed_at": _iso(row.get("completed_at")),
         "completed_by": row.get("completed_by"),
         "deep_link": deep_link(str(specimen.get("id"))),
-        # Additive beyond 1.2.0 — see the module docstring.
-        "confidence": row.get("confidence") or "unknown",
-        "degraded": bool(row.get("degraded")),
+        # Additive beyond 1.2.0 — see the module docstring. ``None`` is a real
+        # answer here and is not the same as "high": a task that has already
+        # been completed is not regenerated, and the frozen ``task`` table has
+        # no column to have kept its confidence in. ``detail`` is the one thing
+        # that survives, and it is only ever written when there was a caveat.
+        "confidence": row.get("confidence"),
+        "degraded": (
+            bool(row["degraded"]) if "degraded" in row else bool(row.get("detail"))
+        ),
         "degradations": row.get("degradations") or [],
     }
 
