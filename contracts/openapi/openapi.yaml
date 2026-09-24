@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: The Ministry of Herbology API
-  version: 1.2.0
+  version: 1.3.0
   description: |
     Contract for the Ministry of Herbology. Frozen in S0 — only Workstream A
     changes this file, via an ADR. Every path declares the workstream that
@@ -1199,7 +1199,17 @@ components:
 
     Task:
       type: object
-      required: [id, specimen, task_type, due_at, status, title, plain_title]
+      description: >-
+        A task is the last link in a chain that starts at a care value and runs
+        through the water balance. ADR 0018 made a degraded `WaterBalance` say
+        so; ADR 0020 carries that the rest of the way, because the instruction
+        a person acts on is where it matters most. `confidence`, `degraded` and
+        `degradations` are required for the same reason they are on
+        `WaterBalance`: an answer that may omit them cannot be told apart from
+        one that had nothing to declare.
+      required:
+        [id, specimen, task_type, due_at, status, title, plain_title,
+         confidence, degraded, degradations]
       properties:
         id:          { type: string, format: uuid }
         specimen:    { $ref: '#/components/schemas/SpecimenBrief' }
@@ -1216,6 +1226,15 @@ components:
         completed_at: { type: [string, 'null'], format: date-time }
         completed_by: { $ref: '#/components/schemas/Member' }
         deep_link:   { type: string, description: '/specimen/{id}/tending' }
+        confidence:  { $ref: '#/components/schemas/Confidence' }
+        degraded:    { type: boolean }
+        degradations:
+          type: array
+          items: { $ref: '#/components/schemas/Degradation' }
+          description: >-
+            Each carries a plain sentence in `detail`, written to be shown to
+            the reader as-is. A task built on an unattested coefficient must not
+            arrive looking like a measurement.
 
     TaskCompletion:
       type: object
@@ -1230,7 +1249,13 @@ components:
 
     MorningRounds:
       type: object
-      required: [date, due, satisfied, alerts]
+      description: >-
+        ADR 0020 §3. A plant with no watering interval anywhere — no cited care
+        value, no species column, no household rule — generates no task, and a
+        plant with no task looks exactly like a plant that needs nothing.
+        `unscheduled` is the same hole `/almanac/frost` filled with
+        `unassessable`, in the screen people actually open every morning.
+      required: [date, due, satisfied, alerts, unscheduled]
       properties:
         date:      { type: string, format: date }
         greeting:  { type: string }
@@ -1244,6 +1269,12 @@ components:
         alerts:
           type: array
           items: { $ref: '#/components/schemas/FrostAlert' }
+        unscheduled:
+          type: array
+          items: { $ref: '#/components/schemas/UnassessableSpecimen' }
+          description: >-
+            Plants the scheduler could not give a task, each with the reason.
+            Silence has two meanings and this separates them.
         weather: { $ref: '#/components/schemas/ForecastPoint' }
 
     CareRule:
