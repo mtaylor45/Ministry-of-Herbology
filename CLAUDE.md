@@ -63,8 +63,11 @@ Leaflet · uPlot · Docker stack behind Nginx. See `docs/adr/0002-stack.md`.
 
 ## Conventions
 
-- Python: `ruff` + `black` line length 100, `mypy` on `api/` and `workers/`.
-  Tests with `pytest`.
+- Python: `black` at line length 88 (what CI enforces and what the tree is),
+  `ruff` at 100 — black cannot split a long comment, so the lint allows what the
+  formatter will not fix. `mypy` on `api/` and `workers/`. Tests with `pytest`.
+  A test module's basename must be unique repository-wide: there is no root
+  pytest config, so two `test_http.py` files collide and stop collection.
 - TypeScript/Svelte: `prettier` + `eslint`, `svelte-check`. Tests with `vitest`;
   e2e with Playwright (browsers are preinstalled; never run `playwright install`).
 - Units are SI internally (mm, °C, litres); display units are a user preference.
