@@ -47,6 +47,47 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Protocol, runtime_checkable
 
+from .credentials import FORBIDDEN_KEYS, SecretInPayload, assert_clean
+
+#: Re-exported: ``contracts/events/mqtt.md`` states the rule ("nothing secret
+#: goes in a payload") and a reader of this module should find its enforcement
+#: here rather than having to go looking. The implementation moved to
+#: :mod:`workers.hub.credentials` in S4, when notifications became a second way
+#: a payload leaves this worker. One rule, one implementation, two senders.
+__all__ = [
+    "AVAILABILITY_TOPIC",
+    "COMMAND_COMPLETE",
+    "COMMAND_REFRESH",
+    "COMMAND_TOPICS",
+    "DISCOVERY_PREFIX",
+    "FORBIDDEN_KEYS",
+    "MQTT_PREFIX",
+    "OFFLINE",
+    "ONLINE",
+    "Command",
+    "MemoryPublisher",
+    "Message",
+    "Publisher",
+    "SecretInPayload",
+    "attributes_topic",
+    "availability",
+    "connect_publisher",
+    "device_block",
+    "discovery_config",
+    "discovery_messages",
+    "discovery_topic",
+    "frost_messages",
+    "guard",
+    "last_will",
+    "object_id_for",
+    "parse_command",
+    "publish_all",
+    "rounds_messages",
+    "specimen_messages",
+    "state_topic",
+    "transport_available",
+]
+
 #: Prefixes from the contract. ``homeassistant/`` is HA's discovery prefix and
 #: is configurable at the HA end; ``herbology/`` is ours.
 MQTT_PREFIX = "herbology"
@@ -65,38 +106,6 @@ COMMAND_REFRESH = f"{MQTT_PREFIX}/cmd/rounds/refresh"
 COMMAND_TOPICS = (COMMAND_COMPLETE, COMMAND_REFRESH)
 
 _COMPLETE_PATTERN = re.compile(rf"^{MQTT_PREFIX}/cmd/task/([^/]+)/complete$")
-
-#: Keys that must never appear in a published payload, and the patterns that
-#: catch a credential nobody bothered to name. See :func:`guard`.
-FORBIDDEN_KEYS = frozenset(
-    {
-        "token",
-        "access_token",
-        "api_key",
-        "apikey",
-        "password",
-        "secret",
-        "authorization",
-        "feed_token",
-        "ics_token",
-    }
-)
-_CREDENTIAL_PATTERNS = (
-    re.compile(r"\beyJ[A-Za-z0-9_\-]{6,}\.[A-Za-z0-9_\-]{6,}\.[A-Za-z0-9_\-]{6,}"),
-    re.compile(r"(?i)\b(?:bearer|token|api[_-]?key)\b\s*[:=]\s*\S{8,}"),
-    re.compile(r"(?i)\b[a-z][a-z0-9+.\-]*://[^/\s:@]+:[^/\s@]+@"),
-    # A tokenised feed URL, which is how G's ICS subscriptions are addressed.
-    re.compile(r"(?i)/feeds?/[A-Za-z0-9_\-]{16,}"),
-)
-
-
-class SecretInPayload(ValueError):
-    """A payload carried something credential-shaped. Refused, not published.
-
-    Raised rather than logged. An MQTT broker keeps a retained message until
-    something replaces it, so a token published once is a token sitting on the
-    broker until somebody notices — and nobody reads a warning in a worker log.
-    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,38 +427,13 @@ def guard(message: Message) -> Message:
     Both halves are checked: the JSON keys, because a token is usually
     *labelled*, and the raw text, because the interesting case is the one
     nobody labelled — a feed URL pasted into an attribute.
+
+    The scanning itself is :mod:`workers.hub.credentials`, shared with the
+    notification channel since S4. A broker retains a message and a phone keeps
+    a notification: one rule, one implementation, two places it has to hold.
     """
-    try:
-        body = json.loads(message.payload)
-    except ValueError:
-        body = None
-    for key in _keys_of(body):
-        if key.lower() in FORBIDDEN_KEYS:
-            raise SecretInPayload(
-                f"{message.topic}: payload carries a {key!r} field. Nothing "
-                "secret goes over MQTT (contracts/events/mqtt.md)."
-            )
-    for pattern in _CREDENTIAL_PATTERNS:
-        if pattern.search(message.payload):
-            raise SecretInPayload(
-                f"{message.topic}: payload matches a credential pattern. "
-                "Nothing secret goes over MQTT (contracts/events/mqtt.md)."
-            )
+    assert_clean(message.topic, message.payload)
     return message
-
-
-def _keys_of(body: Any) -> list[str]:
-    if isinstance(body, Mapping):
-        keys = [str(key) for key in body]
-        for value in body.values():
-            keys.extend(_keys_of(value))
-        return keys
-    if isinstance(body, list):
-        keys = []
-        for item in body:
-            keys.extend(_keys_of(item))
-        return keys
-    return []
 
 
 async def publish_all(

@@ -63,6 +63,11 @@ from .mqtt import (  # noqa: F401  — the topic layout is contract, re-exported
     specimen_messages,
     state_topic,
 )
+from .notify.jobs import (
+    notify_frost,
+    notify_integration_health,
+    notify_rounds,
+)
 from .settings import HubSettings, get_settings
 from .sources.base import HOME_ASSISTANT, HubUnavailable, PollResult
 
@@ -430,6 +435,9 @@ class WorkerSettings(metaclass=ArqBootstrap):
         check_home_assistant,
         hub_health,
         publish_to_mqtt,
+        notify_rounds,
+        notify_frost,
+        notify_integration_health,
     ]
 
     cron_jobs: ClassVar[list] = []
@@ -456,6 +464,23 @@ def _build_cron_jobs() -> list[Any]:
         ),
         # After the poll and after G's rules have run for the morning.
         cron(publish_to_mqtt, minute={10, 40}),
+        # --- notifications (S4) ------------------------------------------
+        #
+        # Frost every fifteen minutes, and that cadence is the requirement
+        # rather than a preference: the brief's own example is a Freeze
+        # Warning issued at 2 PM for that night, and a daily job learns about
+        # it the following morning. The job is cheap — one GET, and nothing
+        # sent unless the forecast is new news — so the interval is set by how
+        # late an alert may be, not by how much it costs.
+        cron(notify_frost, minute={0, 15, 30, 45}),
+        # Rounds hourly: the job itself decides whether the site's local clock
+        # has reached the hour the member asked for, because a cron in UTC
+        # cannot know that and a household that moves through a DST change
+        # would otherwise get their rounds an hour out twice a year.
+        cron(notify_rounds, minute={5}),
+        # Health hourly, well after the poll and the health check have had a
+        # chance to run and record. It waits out its own grace period on top.
+        cron(notify_integration_health, minute={25}),
     ]
 
 

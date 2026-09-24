@@ -443,10 +443,18 @@ def test_supported_metrics_is_still_importable_from_tasks():
 
 
 def test_every_job_is_registered_with_arq():
+    """A job Arq does not know about is a job that never runs.
+
+    Written as an exact set rather than a subset on purpose: adding a job and
+    forgetting to register it is silent, and so is registering one twice.
+    """
     registered = set(tasks.WorkerSettings.functions)
     assert registered == {
         tasks.poll_home_assistant,
         tasks.check_home_assistant,
         tasks.hub_health,
         tasks.publish_to_mqtt,
+        tasks.notify_rounds,
+        tasks.notify_frost,
+        tasks.notify_integration_health,
     }
