@@ -5,116 +5,156 @@
   "days": [
     {
       "date": "2026-07-01",
-      "tmin_c": 18.0,
-      "tmax_c": 30.0,
+      "tmin_c": 17.5,
+      "tmax_c": 28.0,
       "precip_mm": 0.0,
-      "et0_mm": 5.0,
+      "et0_mm": 4.6,
       "condition": "clear"
     },
     {
       "date": "2026-07-02",
       "tmin_c": 18.0,
-      "tmax_c": 30.0,
+      "tmax_c": 29.2,
       "precip_mm": 0.0,
-      "et0_mm": 5.0,
+      "et0_mm": 4.9,
       "condition": "clear"
     },
     {
       "date": "2026-07-03",
-      "tmin_c": 18.0,
-      "tmax_c": 30.0,
+      "tmin_c": 18.6,
+      "tmax_c": 30.1,
       "precip_mm": 0.0,
-      "et0_mm": 5.0,
+      "et0_mm": 5.1,
       "condition": "clear"
     },
     {
       "date": "2026-07-04",
-      "tmin_c": 18.0,
-      "tmax_c": 30.0,
+      "tmin_c": 19.2,
+      "tmax_c": 31.0,
       "precip_mm": 0.0,
-      "et0_mm": 5.0,
+      "et0_mm": 5.3,
       "condition": "clear"
     },
     {
       "date": "2026-07-05",
-      "tmin_c": 18.0,
-      "tmax_c": 30.0,
+      "tmin_c": 19.8,
+      "tmax_c": 31.8,
       "precip_mm": 0.0,
-      "et0_mm": 5.0,
+      "et0_mm": 5.5,
       "condition": "clear"
     },
     {
       "date": "2026-07-06",
-      "tmin_c": 18.0,
-      "tmax_c": 30.0,
+      "tmin_c": 20.4,
+      "tmax_c": 32.5,
       "precip_mm": 0.0,
-      "et0_mm": 5.0,
+      "et0_mm": 5.7,
       "condition": "clear"
     },
     {
       "date": "2026-07-07",
-      "tmin_c": 16.0,
-      "tmax_c": 22.0,
-      "precip_mm": 38.0,
-      "et0_mm": 1.2,
-      "condition": "rain"
+      "tmin_c": 21.0,
+      "tmax_c": 33.1,
+      "precip_mm": 0.0,
+      "et0_mm": 5.8,
+      "condition": "clear"
     },
     {
       "date": "2026-07-08",
-      "tmin_c": 16.0,
-      "tmax_c": 25.0,
+      "tmin_c": 21.3,
+      "tmax_c": 33.4,
       "precip_mm": 0.0,
-      "et0_mm": 3.4,
-      "condition": "cloudy"
+      "et0_mm": 5.8,
+      "condition": "clear"
     },
     {
       "date": "2026-07-09",
-      "tmin_c": 16.0,
-      "tmax_c": 25.0,
+      "tmin_c": 21.1,
+      "tmax_c": 32.6,
       "precip_mm": 0.0,
-      "et0_mm": 3.4,
-      "condition": "cloudy"
+      "et0_mm": 5.5,
+      "condition": "partly_cloudy"
     },
     {
       "date": "2026-07-10",
-      "tmin_c": 16.0,
-      "tmax_c": 25.0,
+      "tmin_c": 20.6,
+      "tmax_c": 30.4,
       "precip_mm": 0.0,
-      "et0_mm": 3.4,
-      "condition": "cloudy"
+      "et0_mm": 4.8,
+      "condition": "partly_cloudy"
+    },
+    {
+      "date": "2026-07-11",
+      "tmin_c": 18.2,
+      "tmax_c": 21.5,
+      "precip_mm": 38.0,
+      "et0_mm": 1.5,
+      "condition": "rain"
     }
   ],
   "advisories": [],
   "expect": {
-    "description": "A dry spell broken by 38 mm of rain on day 7. Outdoor, uncovered specimens show 'satisfied by rain' rather than having their task vanish. Covered and indoor ones do not.",
+    "description": "Ten rainless days of building July heat, broken on the last day by 38 mm. The scenario ends on the wet day on purpose: the balance reports the state of its newest day, so a scenario that ran on past the rain would report 'ok' and the satisfied state — the one thing this scenario exists to show — would never reach a screen. Outdoor specimens under open sky show 'satisfied by rain' rather than having their task vanish. Covered and indoor ones do not, and a plant that was never due is 'ok' and not 'satisfied'.",
+    "rain_day_index": 10,
     "assertions": [
       {
         "specimen": "01890040-0000-7000-8000-000000000004",
-        "on_day": 6,
+        "on_day": 10,
         "water_task_status": "satisfied",
         "satisfied_by": "rain",
-        "note": "Back Terrace is uncovered"
+        "note": "45 L lemon on the uncovered Back Terrace; due from day 4"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000010",
+        "on_day": 10,
+        "water_task_status": "satisfied",
+        "satisfied_by": "rain",
+        "note": "8 L basil on the same terrace; a small pot is due by day 1"
       },
       {
         "specimen": "01890040-0000-7000-8000-000000000007",
-        "on_day": 6,
+        "on_day": 10,
         "water_task_status": "satisfied",
-        "satisfied_by": "rain"
+        "satisfied_by": "rain",
+        "note": "in-ground rose in the South Border: a 60 mm profile at K_c 0.85 needs eight days of this heat to cross, which is why the dry spell is ten and not six"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000008",
+        "on_day": 10,
+        "water_task_status": "satisfied",
+        "satisfied_by": "rain",
+        "note": "in-ground hostas in the uncovered North Shade Bed"
       },
       {
         "specimen": "01890040-0000-7000-8000-000000000005",
-        "on_day": 6,
+        "on_day": 10,
         "water_task_status": "due",
-        "note": "Covered Porch: f_cover = 0, rain never reaches it"
+        "note": "Covered Porch: f_cover = 0, so the rain never reaches it and the watering stays owed"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000011",
+        "on_day": 10,
+        "water_task_status": "due",
+        "note": "also on the Covered Porch, and also still owed"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000006",
+        "on_day": 10,
+        "water_task_status": "ok",
+        "satisfied_by": null,
+        "note": "the drought-adapted lavender hedge never crossed its threshold in ten days, so the rain settled nothing. 'ok' is not 'satisfied': a watering that was never owed must not be reported as one the sky did for you"
       },
       {
         "specimen": "01890040-0000-7000-8000-000000000001",
-        "on_day": 6,
+        "on_day": 10,
         "water_task_status": "due",
         "note": "indoor, interval rule, unaffected by weather"
       },
       {
-        "calendar_behaviour": "satisfied tasks are removed from the ICS feed by UID, not duplicated"
+        "satisfied_task_stays_visible": "a satisfied watering keeps its place in the round, its plant and its amount. A task that vanished because it rained is indistinguishable from one that was never scheduled"
+      },
+      {
+        "calendar_behaviour": "satisfied tasks are cancelled in the ICS feed by their existing UID, not dropped and not duplicated"
       }
     ]
   }

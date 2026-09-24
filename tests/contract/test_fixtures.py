@@ -218,3 +218,110 @@ def test_a_species_specific_source_url_points_at_that_species(repo_root):
     assert (
         checked >= 7
     ), "the fixtures should carry a per-species article for each species"
+
+
+# ------------------------------------------------------------------ members
+
+#: The household `GET /members` serves. ADR 0021 §7 routed the request here:
+#: `api/inventory` seeds a single Keeper in code with empty `notify_prefs`, so a
+#: mock stack read through the API could never demonstrate a notification, and
+#: Workstream F's hub mock had to synthesise preferences to have anything to
+#: send. The data belongs in `fixtures/`; the wiring belongs to C and F.
+MEMBERS = "members/members.json"
+
+#: The id `api/inventory/fixture_repository.py` and `api/tending/
+#: fixture_repository.py` have both seeded since S1, and which
+#: `workers/hub/mocks/ministry.py` derives. It must stay the first member, or
+#: every completion attributed in a test starts pointing at nobody.
+KEEPER_ID = "01890050-0000-7000-8000-000000000001"
+
+
+def test_the_members_fixture_matches_the_contract(repo_root, spec):
+    """Every row is a `Member` as `contracts/openapi/openapi.yaml` declares it."""
+    from jsonschema import Draft202012Validator
+
+    schemas = spec["components"]["schemas"]
+    schema = dict(schemas["Member"])
+    schema["$defs"] = schemas
+    validator = Draft202012Validator(
+        json.loads(json.dumps(schema).replace("#/components/schemas/", "#/$defs/"))
+    )
+    members = _load(repo_root, MEMBERS)
+    assert members, "a members fixture with no members demonstrates nothing"
+    for member in members:
+        errors = [error.message for error in validator.iter_errors(member)]
+        assert not errors, (member.get("name"), errors)
+
+
+def test_the_keeper_keeps_the_id_three_modules_already_use(repo_root):
+    members = _load(repo_root, MEMBERS)
+    assert members[0]["id"] == KEEPER_ID, (
+        "the Keeper's id is seeded in api/inventory, api/tending and "
+        "workers/hub; changing it silently detaches every completion those "
+        "mocks attribute"
+    )
+    assert members[0]["role"] == "keeper"
+
+
+def test_member_ids_and_names_are_unique(repo_root):
+    members = _load(repo_root, MEMBERS)
+    assert len({m["id"] for m in members}) == len(members)
+    assert len({m["name"] for m in members}) == len(members)
+
+
+def test_notify_prefs_follow_the_convention_the_contract_states(repo_root, spec):
+    """ADR 0021 §4 wrote the shape down; this is what holds the fixture to it.
+
+    `notify_prefs` stays an open object — unknown keys are preserved — so a
+    schema cannot enforce the block. The convention is checked here instead,
+    against the keys `workers/hub/notify/model.py` actually reads.
+    """
+    kinds = {"rounds", "frost", "health"}
+    for member in _load(repo_root, MEMBERS):
+        block = (member["notify_prefs"] or {}).get("home_assistant")
+        if block is None:
+            continue
+        assert isinstance(block["service"], str) and block["service"].strip()
+        assert "." in block["service"], (
+            f"{member['name']}: a Home Assistant service is `domain.name`; "
+            f"got {block['service']!r}"
+        )
+        for kind in kinds & set(block):
+            assert isinstance(block[kind], bool), (member["name"], kind)
+        assert 0 <= block["rounds_hour"] <= 23, member["name"]
+        quiet = block["quiet_hours"]
+        assert len(quiet) == 2 and all(0 <= hour <= 23 for hour in quiet)
+        assert block.get("units", "metric") in {"metric", "imperial"}
+
+
+def test_a_member_with_no_notify_service_is_normal_and_present(repo_root):
+    """ADR 0021 §4: not a recipient is not a misconfiguration.
+
+    A household where one person has the companion app and two do not is the
+    ordinary case. If every member in the fixtures is notifiable, nothing
+    exercises the branch where `Recipient.from_member_row` returns `None`, and
+    the Ministry Office cannot be shown saying "nobody is set up" without it
+    looking like a failure.
+    """
+    members = _load(repo_root, MEMBERS)
+    services = [
+        (member["notify_prefs"] or {}).get("home_assistant", {}).get("service")
+        for member in members
+    ]
+    assert any(services), "no member can be notified, so F's adapter has no target"
+    assert not all(services), (
+        "every member has a notification service, so nothing exercises the "
+        "member who simply has not installed the companion app"
+    )
+
+
+def test_the_members_fixture_carries_no_credential(repo_root):
+    """A service name is not a token, and nothing here may become one.
+
+    ADR 0021 §4 is explicit: the credential is the token in the Authorization
+    header and never comes near a stored preference. This is the check that
+    keeps somebody from putting one here for convenience.
+    """
+    raw = (repo_root / "fixtures" / MEMBERS).read_text().lower()
+    for word in ("token", "password", "secret", "api_key", "apikey", "bearer"):
+        assert word not in raw, f"the members fixture mentions {word!r}"
