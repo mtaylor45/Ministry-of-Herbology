@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -114,6 +114,46 @@ def connection():
             return [item for item in self.executed if fragment in item[0]]
 
     return RecordingConnection()
+
+
+@pytest.fixture
+def recipient():
+    """One member who has set up the companion app and wants everything.
+
+    Built from a ``member`` row rather than constructed directly, so the
+    ``notify_prefs`` convention this workstream reads is exercised by every
+    test that uses it rather than only by the two that parse it.
+    """
+    from workers.hub.notify.model import Recipient
+
+    return Recipient.from_member_row(
+        {
+            "id": "01890050-0000-7000-8000-000000000001",
+            "name": "Keeper",
+            "notify_prefs": {
+                "home_assistant": {
+                    "service": "notify.mobile_app_test_phone",
+                    "rounds_hour": 7,
+                    "quiet_hours": [22, 7],
+                }
+            },
+        }
+    )
+
+
+@pytest.fixture
+def channel():
+    from workers.hub.notify.channels import MemoryChannel
+
+    return MemoryChannel()
+
+
+@pytest.fixture
+def ministry(settings):
+    """The mock Ministry: today's rounds and tonight's frost, from fixtures."""
+    from workers.hub.mocks.ministry import MockMinistryReader
+
+    return MockMinistryReader(settings, today=date(2026, 10, 23))
 
 
 @pytest.fixture(autouse=True)

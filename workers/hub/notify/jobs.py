@@ -188,6 +188,7 @@ async def _finish(
     job: str,
     *,
     started_at: datetime,
+    now: datetime,
     deliveries: Sequence[Delivery],
     skipped: Sequence[Mapping[str, str]],
     notes: Sequence[str],
@@ -200,6 +201,12 @@ async def _finish(
     hub refused was not said, and a ledger that recorded the attempt would make
     the retry impossible — which is the difference between a frost warning that
     arrives ten minutes late and one that never arrives at all.
+
+    The ledger entry is stamped with ``now`` — the job's own clock — and not
+    with the wall clock it happened to finish on. The two are the same in a
+    deployment and are not the same in a test, and a ledger that reads back
+    against one clock and writes against another is a dedupe that quietly does
+    nothing.
     """
     finished_at = datetime.now(UTC)
     sent = [item for item in deliveries if item.ok]
@@ -239,7 +246,7 @@ async def _finish(
             detail=detail,
         )
     if keys:
-        await _ledger(ctx).record(job, keys, at=finished_at)
+        await _ledger(ctx).record(job, keys, at=now)
 
     return {
         **detail,
@@ -283,6 +290,7 @@ async def notify_rounds(ctx: dict[str, Any]) -> dict[str, Any]:
             ctx,
             "notify_rounds",
             started_at=started_at,
+            now=now,
             deliveries=[],
             skipped=[],
             notes=[
@@ -318,6 +326,7 @@ async def notify_rounds(ctx: dict[str, Any]) -> dict[str, Any]:
         ctx,
         "notify_rounds",
         started_at=started_at,
+        now=now,
         deliveries=deliveries,
         skipped=[*skipped, *gated],
         notes=notes,
@@ -350,6 +359,7 @@ async def notify_frost(ctx: dict[str, Any]) -> dict[str, Any]:
             ctx,
             "notify_frost",
             started_at=started_at,
+            now=now,
             deliveries=[],
             skipped=[],
             notes=[
@@ -385,6 +395,7 @@ async def notify_frost(ctx: dict[str, Any]) -> dict[str, Any]:
         ctx,
         "notify_frost",
         started_at=started_at,
+        now=now,
         deliveries=deliveries,
         skipped=[*skipped, *gated],
         notes=notes,
@@ -471,6 +482,7 @@ async def notify_integration_health(ctx: dict[str, Any]) -> dict[str, Any]:
         ctx,
         "notify_integration_health",
         started_at=started_at,
+        now=now,
         deliveries=deliveries,
         skipped=[*skipped, *gated],
         notes=notes,

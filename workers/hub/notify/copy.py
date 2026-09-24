@@ -33,7 +33,19 @@ A degraded input never becomes an imperative. :func:`certainty_note` turns a
 ``Degradation.detail`` as written — the contract specifies it as "a plain
 sentence, written to be shown to the reader as-is".
 
-## 4. Do not claim all is well
+## 4. A dedupe key names the destination, not the member
+
+Two members can point ``notify_prefs`` at the same Home Assistant service — a
+kitchen tablet, a shared speaker, a household Telegram chat. That is one place,
+and it should be told a thing once. Keying on the member id instead would make
+the tablet chime twice for the same frost, which is how a household learns to
+ignore it.
+
+Where their preferences differ — one wants Fahrenheit, one wants Celsius —
+whichever is built first wins the single message. One tablet cannot show two
+temperatures, and buzzing twice to resolve the disagreement helps nobody.
+
+## 5. Do not claim all is well
 
 ``MorningRounds.unscheduled[]`` lists the plants the scheduler could not give a
 task to. A push that said "nothing to do today" while three plants were
@@ -242,7 +254,7 @@ def rounds_notification(
         title=f"Today's rounds: {count} {noun}",
         themed_title="The morning rounds await",
         body="\n".join(lines),
-        dedupe_key=f"rounds:{recipient.member_id}:{on}",
+        dedupe_key=f"rounds:{recipient.service}:{on}",
         deep_link="/rounds",
         certainty=certainty,
     )
@@ -332,7 +344,7 @@ def frost_notification(
         title=title,
         themed_title="A hard frost is forecast for the grounds",
         body="\n".join(lines),
-        dedupe_key=f"frost:{recipient.member_id}:{_frost_digest(open_alerts)}",
+        dedupe_key=f"frost:{recipient.service}:{_frost_digest(open_alerts)}",
         deep_link="/almanac/frost",
         urgent=True,
         certainty=certainty,
@@ -371,7 +383,7 @@ def health_notification(
             title=f"{names} is answering again",
             themed_title="The instruments are reporting once more",
             body="Readings have resumed.",
-            dedupe_key=f"health:{recipient.member_id}:recovered:{names}",
+            dedupe_key=f"health:{recipient.service}:recovered:{names}",
             deep_link="/office/integrations",
             certainty=Certainty(confidence="high", stated=True),
         )
@@ -398,7 +410,7 @@ def health_notification(
         title=title,
         themed_title="The instruments have fallen silent",
         body="\n".join(lines),
-        dedupe_key=f"health:{recipient.member_id}:{_health_digest(broken)}",
+        dedupe_key=f"health:{recipient.service}:{_health_digest(broken)}",
         deep_link="/office/integrations",
         certainty=Certainty(confidence="high", stated=True),
     )

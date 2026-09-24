@@ -41,7 +41,7 @@ guessed at here with a shared secret.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -63,7 +63,10 @@ class MinistryReader(Protocol):
 
     async def frost(self) -> Mapping[str, Any]: ...
 
-    async def members(self) -> list[Mapping[str, Any]]: ...
+    # ``Sequence`` rather than ``list``: a list is invariant in its element
+    # type, so a reader returning ``list[dict[...]]`` — which every natural
+    # implementation does — would not satisfy ``list[Mapping[...]]``.
+    async def members(self) -> Sequence[Mapping[str, Any]]: ...
 
 
 @dataclass(slots=True)
@@ -73,20 +76,33 @@ class ApiReader:
     settings: HubSettings = field(default_factory=get_settings)
     _client: Any = None
 
+    def build_client(self) -> Any:
+        """The client, with the headers it is allowed to send and no others.
+
+        A method rather than four lines inside :meth:`_get` so a test can hold
+        it and assert what is on it. "This call carries no credential" is the
+        kind of claim that is true until somebody adds a header in a hurry, and
+        a comment does not fail a build.
+        """
+        import httpx
+
+        return httpx.AsyncClient(
+            headers={
+                "User-Agent": self.settings.user_agent,
+                "Accept": "application/json",
+            },
+            timeout=self.settings.http_timeout_s,
+        )
+
+    def url_for(self, path: str) -> str:
+        return f"{self.settings.api_url.rstrip('/')}{API_PREFIX}{path}"
+
     async def _get(self, path: str) -> Any:
         import httpx
 
-        base = self.settings.api_url.rstrip("/")
-        url = f"{base}{API_PREFIX}{path}"
+        url = self.url_for(path)
         if self._client is None:
-            self._client = httpx.AsyncClient(
-                # No Authorization header, by construction. See the module note.
-                headers={
-                    "User-Agent": self.settings.user_agent,
-                    "Accept": "application/json",
-                },
-                timeout=self.settings.http_timeout_s,
-            )
+            self._client = self.build_client()
         try:
             response = await self._client.get(url)
         except httpx.HTTPError as exc:

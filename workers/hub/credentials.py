@@ -99,10 +99,10 @@ def keys_of(body: Any) -> list[str]:
             keys.extend(keys_of(value))
         return keys
     if isinstance(body, list):
-        keys: list[str] = []
+        found: list[str] = []
         for item in body:
-            keys.extend(keys_of(item))
-        return keys
+            found.extend(keys_of(item))
+        return found
     return []
 
 
