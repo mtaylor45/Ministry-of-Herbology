@@ -68,7 +68,7 @@
   const now = $derived(new Date(rounds?.date ? `${rounds.date}T12:00:00Z` : Date.now()));
 
   const unscheduled = $derived(
-    unscheduledRows(rounds?.unscheduled ?? [], data.specimens.value?.items ?? null),
+    unscheduledRows(rounds?.unscheduled ?? [], data.specimens?.value?.items ?? null),
   );
 
   let selected = $state(new Set<string>());
@@ -77,6 +77,10 @@
   let busyTask = $state<string | null>(null);
   let announcement = $state('');
   let failure = $state('');
+  /** Where focus goes when the row that had it has just been ticked off the
+   *  round. Without this, completing the last task in a list drops focus to the
+   *  top of the document and a screen reader starts the page again. */
+  let outcome: HTMLParagraphElement | undefined = $state();
 
   // ADR 0008: the picker defaults to the last member used on this device. It is
   // read after mount because it is a browser preference, not server state.
@@ -112,6 +116,7 @@
       announcement = completionAnnouncement(done.length, memberName(members, memberId));
       selected = new Set<string>();
       await invalidate('moh:rounds');
+      outcome?.focus();
     } catch (cause) {
       // The selection is kept deliberately: a reader who has just ticked six
       // rows should not have to find them again to try a second time.
@@ -145,7 +150,9 @@
     <!-- One live region for the whole screen: both ways of completing a task
          report through it, so "3 tasks marked done" is announced once however
          it was done. -->
-    <p class="announce" role="status" aria-live="polite">{announcement}</p>
+    <p class="announce" role="status" aria-live="polite" tabindex="-1" bind:this={outcome}>
+      {announcement}
+    </p>
     {#if failure}
       <p class="failure" role="alert">{failure}</p>
     {/if}
@@ -274,7 +281,7 @@
         done, but there is nobody to attribute them to until it can.
       </p>
     {/if}
-    {#if data.specimens.error && unscheduled.length}
+    {#if data.specimens?.error && unscheduled.length}
       <p class="aside">
         The register could not be read ({data.specimens.error}), so the plants above are named by
         their register entry rather than by name.
