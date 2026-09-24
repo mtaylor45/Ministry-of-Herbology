@@ -21,8 +21,10 @@ is `docs/design/style-guide.md`.
    (`*/mocks/`) and are driven by `fixtures/`.
 4. **One task, one PR.** Each PR carries tests, a short description, and a link to
    its sprint task. A reviews and merges. Open PRs as drafts.
-5. **Definition of done.** Tests pass in CI, the change deploys to staging, the UI
-   meets WCAG AA, and docs are updated.
+5. **Definition of done.** Tests pass in CI, the change comes up from the
+   documented deployment on a clean machine (ADR 0019 — this project ships a
+   deployment other people run; there is no staging environment and no
+   credential in this repository), the UI meets WCAG AA, and docs are updated.
 6. **No invented plant facts.** Every care value carries a source citation
    (`source_id`) and a confidence level, and the user can edit it. A value with no
    citation must be `confidence: unknown` and visibly marked in the UI.
@@ -44,7 +46,7 @@ is `docs/design/style-guide.md`.
 | `contracts/` | A | Schema, OpenAPI, event topics — frozen |
 | `docs/adr/` | A | Architecture decision records |
 | `docs/design/` | A | The Enchanted Academy style guide — the visual reference |
-| `infra/`, `.github/` | B | CI, images, compose, swarm stacks |
+| `infra/`, `.github/`, `docs/deploy/` | B | CI, images, compose, swarm stack, the deployment guide |
 | `api/inventory/` | C | Specimens, locations, zones, groups, photos, logs, members |
 | `workers/botany/` | D | Taxon resolution, source connectors, cited care synthesis |
 | `workers/weather/`, `api/almanac/` | E | Open-Meteo/NWS ingest, water balance, frost engine |
