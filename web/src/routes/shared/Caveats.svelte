@@ -1,6 +1,6 @@
 <script lang="ts">
-  /** How much to trust the number beside this, and every reason it might be
-   *  wrong — in the engine's own words, in full, on the screen.
+  /** How much to trust the number or the instruction beside this, and every
+   *  reason it might be wrong — in the engine's own words, in full, on screen.
    *
    *  Not a tooltip, not an icon, not a colour. Under ADR 0010 the weather
    *  engines are the only authority on whether an outdoor plant is watered or
@@ -13,13 +13,22 @@
    *  here is how six wordings of one caveat come to exist. */
   import StatusPill from '$ui/StatusPill.svelte';
   import Icon from '$ui/Icon.svelte';
-  import type { Assessment } from './api';
+  import type { Status } from '$ui/status';
+  import type { Assessment } from './assessment';
   import {
     capSentence,
     caveats,
     measurementConfidence,
     reportsItsOwnConfidence,
   } from './assessment';
+
+  /** The Almanac's silence, kept as the default because it is where the notice
+   *  was first needed: its two endpoints are outside ADR 0018 altogether. */
+  const ALMANAC_SILENCE =
+    'does not say how sure it is. A stale ingest or a locally computed evaporation figure lowers ' +
+    'what the engine behind it is worth, and ADR 0018 requires that to be declared on the water ' +
+    'balance and the frost guard — but not on these two endpoints, which carry nothing of the ' +
+    'sort. Read nothing here as a clean bill of health. Asked of Workstream A this sprint.';
 
   let {
     payload,
@@ -28,11 +37,27 @@
      *  `assessment.ts`: silence has to look like silence, not like a clean bill
      *  of health. */
     noticeWhenSilent = true,
+    /** The sentence shown when nothing is reported. It names the endpoints that
+     *  are silent and why, so it belongs to the screen rather than here; this
+     *  default is the Almanac's, which is where the notice was first needed. */
+    silentNotice = ALMANAC_SILENCE,
+    /** The pill for this confidence level. The default vocabulary is about
+     *  *readings* — "read through cloud" — which is right for a forecast and
+     *  wrong for a watering worked out from an uncited interval, so a screen
+     *  with a different kind of answer passes its own words. */
+    status,
+    /** `heading` puts "Why it may be wrong" in the page outline, which is right
+     *  when the block is one panel on a screen. In a list of eight tasks it is
+     *  eight identical headings naming no plant, so a row passes `text`. */
+    labelAs = 'heading',
   }: {
     payload: Assessment | null | undefined;
     /** Plain name of the thing being assessed: "This forecast". */
     what: string;
     noticeWhenSilent?: boolean;
+    silentNotice?: string;
+    status?: Status;
+    labelAs?: 'heading' | 'text';
   } = $props();
 
   const reports = $derived(reportsItsOwnConfidence(payload));
@@ -43,11 +68,15 @@
   <div class="assessment" class:degraded={reasons.length > 0}>
     <p class="level">
       <span class="what">{what}</span>
-      <StatusPill status={measurementConfidence(payload?.confidence)} />
+      <StatusPill status={status ?? measurementConfidence(payload?.confidence)} />
     </p>
 
     {#if reasons.length}
-      <h3 class="why">Why it may be wrong</h3>
+      {#if labelAs === 'heading'}
+        <h3 class="why">Why it may be wrong</h3>
+      {:else}
+        <p class="why">Why it may be wrong</p>
+      {/if}
       <ul>
         {#each reasons as reason (reason.code)}
           <li>
@@ -64,12 +93,7 @@
 {:else if noticeWhenSilent}
   <p class="silent">
     <span class="glyph" aria-hidden="true"><Icon name="warning" size={18} /></span>
-    <span>
-      {what} does not say how sure it is. A stale ingest or a locally computed evaporation figure lowers
-      what the engine behind it is worth, and ADR 0018 requires that to be declared on the water balance
-      and the frost guard — but not on these two endpoints, which carry nothing of the sort. Read nothing
-      here as a clean bill of health. Asked of Workstream A this sprint.
-    </span>
+    <span>{what} {silentNotice}</span>
   </p>
 {/if}
 
@@ -97,6 +121,7 @@
   }
   .why {
     margin: var(--moh-space-3) 0 var(--moh-space-2);
+    font-weight: 700;
     font-family: var(--moh-font-body);
     font-size: var(--moh-text-sm);
     text-transform: uppercase;

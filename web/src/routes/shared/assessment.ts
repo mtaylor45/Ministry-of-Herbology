@@ -1,25 +1,61 @@
-/** Showing how much the weather engine's answers are worth.
+/** Showing how much an engine's answer is worth, wherever one is shown.
  *
  * Under ADR 0010 nothing in the house measures the soil, and the engines
- * beneath the Almanac are the only authority on whether a plant is dry or
- * about to freeze. Their worst failure is not being wrong — it is losing an
- * input and going on answering in the same confident voice, because an app that
- * has gone quiet looks exactly like a garden that needs nothing.
+ * behind the Almanac and the scheduler are the only authority on whether a
+ * plant is dry or about to freeze. Their worst failure is not being wrong — it
+ * is losing an input and going on answering in the same confident voice,
+ * because an app that has gone quiet looks exactly like a garden that needs
+ * nothing.
  *
  * Workstream E's half of that is `workers/weather/quality.py`: every answer
  * carries `confidence`, `degraded` and a list of `degradations`, each a named
- * reason with a finished sentence in it. This module is J's half — the caveat
- * goes **next to the number**, in the sentence E wrote, not behind a tooltip and
- * not in a colour.
+ * reason with a finished sentence in it. Workstream G's scheduler carries the
+ * same three onto every task it generates, for the same reason — a watering
+ * worked out from a degraded water balance is the next link in that chain.
+ *
+ * This module is J's half — the caveat goes **next to the number or the
+ * instruction**, in the sentence the engine wrote, not behind a tooltip and not
+ * in a colour. It lives in `shared/` rather than beside one screen because the
+ * Almanac and Morning Rounds must not grow two vocabularies for one idea.
  */
 
-import type { Assessment, Confidence, Degradation } from './api';
+import type { Confidence } from '$api/client';
+
+export type { Confidence };
+
+/** One named reason an answer is worth less than a clean measurement.
+ *
+ *  `detail` is a finished sentence, written by the engine to be shown to a
+ *  reader as it stands. It is never summarised, truncated or reworded here:
+ *  the wording is the engine's half of the contract with whoever is holding
+ *  the phone. */
+export interface Degradation {
+  code: string;
+  detail: string;
+  caps_at: Confidence;
+}
+
+/** How sure an engine is, and why it is not surer.
+ *
+ *  ADR 0018 puts this block on `WaterBalance` and `FrostAlert` and makes it
+ *  required there. It does **not** put it on `ForecastPoint`, on `Series` or on
+ *  `Task`: the Almanac's two endpoints carry nothing of the sort, and the three
+ *  fields the scheduler serves on a task are additive beyond contract 1.2.0 and
+ *  still waiting on A. Every field is therefore optional here, so a screen works
+ *  whether or not they arrive — and `reportsItsOwnConfidence` below is how a
+ *  screen tells "clean" apart from "did not say". */
+export interface Assessment {
+  confidence?: Confidence | null;
+  degraded?: boolean;
+  degradations?: Degradation[];
+}
+
 import type { Status } from '$ui/status';
 
 /** Best to worst — ADR 0004 allows exactly these four. */
 export const CONFIDENCE_ORDER: Confidence[] = ['high', 'medium', 'low', 'unknown'];
 
-export function rank(confidence: Confidence | undefined): number {
+export function rank(confidence: Confidence | null | undefined): number {
   const at = CONFIDENCE_ORDER.indexOf(confidence as Confidence);
   return at === -1 ? CONFIDENCE_ORDER.length - 1 : at;
 }
@@ -32,7 +68,7 @@ export function rank(confidence: Confidence | undefined): number {
  * and a forecast whose ET₀ went missing is not an uncited claim, it is a
  * measured one with a hole in it. Same four levels, different sentence.
  */
-export function measurementConfidence(confidence: Confidence | undefined): Status {
+export function measurementConfidence(confidence: Confidence | null | undefined): Status {
   switch (confidence) {
     case 'high':
       return { themed: 'Read clearly', plain: 'High confidence', tone: 'thriving' };
@@ -62,13 +98,20 @@ export function capSentence(degradation: Degradation): string {
  *
  * **The seam.** ADR 0018 requires the assessment block on `WaterBalance` and
  * `FrostAlert`. `/almanac/forecast` and `/almanac/history` — the two endpoints
- * these screens read — are not covered by it and carry nothing. A screen that
+ * the Almanac reads — are not covered by it and carry nothing. A screen that
  * shows nothing in that case
  * is a screen claiming the forecast is clean, which is the exact failure the
  * engine's confidence arithmetic was built to prevent — so when the block is
- * absent the Almanac says so once, plainly, instead of showing a reassuring
- * blank. When E adds the fields, every caveat below appears with no change
+ * absent the screen says so once, plainly, instead of showing a reassuring
+ * blank. When the fields arrive, every caveat below appears with no change
  * here beyond deleting the notice.
+ *
+ * Morning Rounds is on the other side of the same seam: G's scheduler serves
+ * the three fields on every task today, additively, and the contract does not
+ * carry them yet. `null` is a real answer there and is not silence — a
+ * completed task has no confidence to recover, because the frozen `task` table
+ * has no column it could have been kept in — so a stated `null` still counts
+ * as reporting, and reads as "not stated" rather than as "high".
  */
 export function reportsItsOwnConfidence(payload: Assessment | null | undefined): boolean {
   if (!payload) return false;

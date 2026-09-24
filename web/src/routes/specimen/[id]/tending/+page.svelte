@@ -133,15 +133,15 @@
         {/each}
       </ul>
       <p class="aside">
-        Rules turn into dated tasks in Morning Rounds. Editing a rule is Workstream G's, and arrives
-        with the scheduler in sprint 4.
+        Rules turn into dated tasks in Morning Rounds, where they are ticked off. Editing a rule
+        from here is not built yet.
       </p>
     {:else}
       <EmptyState
         icon="water"
         themed="No rounds set"
         plain="No care rules for this plant"
-        body="Nothing is scheduled for it yet. Rules are generated from the care profile when the scheduler lands in sprint 4."
+        body="Nothing is scheduled for it. Rules are generated from the care profile, and a plant with no cited watering interval gets none — Morning Rounds names it rather than leaving it off silently."
       />
     {/if}
   </Card>
@@ -163,8 +163,8 @@
         {/each}
       </ul>
       <p class="aside">
-        Completing a task happens in Morning Rounds. One-tap completion is Workstream G's endpoint
-        and arrives in sprint 4, so these are read-only today.
+        Completing a task happens in <a href="/">Morning Rounds</a>, one at a time or a round at a
+        time. These are read-only here.
       </p>
     {:else}
       <EmptyState

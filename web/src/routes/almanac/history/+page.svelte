@@ -13,7 +13,7 @@
   import Card from '$ui/Card.svelte';
   import SelectField from '$ui/SelectField.svelte';
   import StaleNotice from '$ui/StaleNotice.svelte';
-  import Caveats from '../Caveats.svelte';
+  import Caveats from '../../shared/Caveats.svelte';
   import Chart from '../Chart.svelte';
   import SiteMissing from '../SiteMissing.svelte';
   import {
