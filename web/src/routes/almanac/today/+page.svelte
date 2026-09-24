@@ -115,16 +115,24 @@
     </Card>
 
     <Card themed="What falls" plain="Rain by hour" level={2}>
-      <Chart
-        plain="Rain by hour"
-        themed="What falls"
-        unit="mm"
-        summary={rain > 0
-          ? `${rain} mm expected across the day.`
-          : 'No rain expected today, so nothing waters itself.'}
-        data={precipitation}
-        series={rainSeries}
-      />
+      {#if rain > 0}
+        <Chart
+          plain="Rain by hour"
+          themed="What falls"
+          unit="mm"
+          summary={`${rain} mm expected across the day.`}
+          data={precipitation}
+          series={rainSeries}
+        />
+      {:else}
+        <!-- A chart of twenty-four zeroes is a chart of nothing, drawn against
+             whatever range the library invents for a flat line. The sentence
+             says the same thing and says it in one glance. -->
+        <p class="none">
+          No rain is forecast today, so nothing waters itself. Anything due for watering is
+          due from you.
+        </p>
+      {/if}
     </Card>
   </div>
 {/if}
@@ -132,6 +140,9 @@
 <style>
   .stack {
     display: grid;
+    /* `minmax(0, 1fr)`, not `1fr`: a grid item's automatic minimum is its
+       content, and a chart canvas is content that would rather be wider. */
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--moh-space-6);
   }
   .brief {
@@ -143,6 +154,10 @@
   dt {
     color: var(--moh-ink-muted);
     font-size: var(--moh-text-sm);
+  }
+  .none {
+    margin: 0;
+    color: var(--moh-ink-muted);
   }
   dd {
     margin: var(--moh-space-1) 0 0;

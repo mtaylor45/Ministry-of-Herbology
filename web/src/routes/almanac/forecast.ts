@@ -173,12 +173,17 @@ export function frostNights(rows: DailyRow[]): DailyRow[] {
 }
 
 /** The span the range bars are drawn against, rounded outwards to whole
- *  degrees so the axis reads like a thermometer rather than like a float. */
+ *  degrees so the axis reads like a thermometer rather than like a float.
+ *
+ *  The span is the week's own. Stretching it to include freezing in a warm week
+ *  would squeeze every bar into the top third of its track to make room for a
+ *  temperature nothing is near. In a week that *does* approach freezing the
+ *  lows bring it into range by themselves, and `freezingPct` marks it. */
 export function temperatureDomain(rows: DailyRow[]): { min: number; max: number } {
   const values = rows.flatMap((row) => [row.low, row.high]).filter(isNumber);
   if (!values.length) return { min: 0, max: 1 };
-  const min = Math.floor(Math.min(...values, FREEZING_C));
-  const max = Math.ceil(Math.max(...values, FREEZING_C + 1));
+  const min = Math.floor(Math.min(...values)) - 1;
+  const max = Math.ceil(Math.max(...values)) + 1;
   return { min, max: max > min ? max : min + 1 };
 }
 
@@ -201,11 +206,14 @@ export function rangeBar(
   };
 }
 
-/** Where freezing sits on the same span, so the strip can rule a line at it. */
+/** Where freezing sits on the same span, so the strip can rule a line at it —
+ *  or null when the week never comes near it, because a marker pinned to the
+ *  end of every row is a mark that means nothing. */
 export function freezingPct(domain: { min: number; max: number }): number | null {
   const span = domain.max - domain.min;
-  if (span <= 0 || FREEZING_C < domain.min || FREEZING_C > domain.max) return null;
-  return ((FREEZING_C - domain.min) / span) * 100;
+  if (span <= 0) return null;
+  const at = ((FREEZING_C - domain.min) / span) * 100;
+  return at < 1 || at > 99 ? null : at;
 }
 
 // ----------------------------------------------------------------- the one day

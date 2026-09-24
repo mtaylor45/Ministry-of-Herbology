@@ -137,6 +137,9 @@
 <style>
   .stack {
     display: grid;
+    /* `minmax(0, 1fr)`, not `1fr`: a grid item's automatic minimum is its
+       content, and a chart canvas is content that would rather be wider. */
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--moh-space-6);
   }
   .lede {

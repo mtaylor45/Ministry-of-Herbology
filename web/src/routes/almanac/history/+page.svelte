@@ -100,7 +100,12 @@
         />
       {/if}
       <div class="go">
-        <Button type="submit" themed="Consult" plain="Show this record" />
+        <!-- Plain only, deliberately: `Label` sets the plain half in
+             `--moh-ink-muted`, which on a primary button's `--moh-accent`
+             ground is about 1.3:1 and fails WCAG AA. Raised with Workstream I
+             in this sprint's pull request; until it is fixed, a themed word
+             here would be a themed word nobody can read. -->
+        <Button type="submit" plain="Show this record" />
       </div>
     </form>
   </Card>
@@ -178,6 +183,9 @@
 <style>
   .stack {
     display: grid;
+    /* `minmax(0, 1fr)`, not `1fr`: a grid item's automatic minimum is its
+       content, and a chart canvas is content that would rather be wider. */
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--moh-space-6);
   }
   .controls {

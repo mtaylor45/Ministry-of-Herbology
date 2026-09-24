@@ -15,6 +15,10 @@
    *  its text half and never asks Node for a canvas.
    */
   import type { Snippet } from 'svelte';
+  // uPlot's own stylesheet sizes the canvas it creates. Without it the canvas
+  // lays out at its device-pixel width — twice its drawn width on a phone —
+  // and hangs off the side of the card.
+  import 'uplot/dist/uPlot.min.css';
   import { axisFont, token, type ChartSeries } from './chart';
 
   let {
@@ -71,6 +75,13 @@
         const { default: UPlot } = await import('uplot');
         if (cancelled || !element.isConnected) return;
 
+        /** The width to draw at. The plot's own box is measured, never the
+         *  canvas inside it: a chart that reports its own width back to a
+         *  container that sizes to its content grows by a few pixels on every
+         *  observation until it is wider than the phone. */
+        const widthOf = () =>
+          Math.max(120, Math.round(element.clientWidth || element.parentElement?.clientWidth || 320));
+
         const draw = () => {
           plot?.destroy();
           const rootPx =
@@ -81,7 +92,7 @@
 
           plot = new UPlot(
             {
-              width: element.clientWidth || 320,
+              width: widthOf(),
               height,
               padding: [null, null, null, null],
               legend: { show: false },
@@ -123,8 +134,12 @@
 
         draw();
 
+        let drawnAt = widthOf();
         sizeWatch = new ResizeObserver(() => {
-          plot?.setSize({ width: element.clientWidth || 320, height });
+          const width = widthOf();
+          if (width === drawnAt) return;
+          drawnAt = width;
+          plot?.setSize({ width, height });
         });
         sizeWatch.observe(element);
 
@@ -238,6 +253,13 @@
   }
   .plot {
     width: 100%;
+    min-width: 0;
+    /* The chart is drawn to the width it was measured at. If it ever disagrees,
+       the page must not start scrolling sideways in the reader's hand. */
+    overflow: hidden;
+  }
+  .plot :global(.uplot) {
+    max-width: 100%;
   }
   .failed {
     margin: 0;
