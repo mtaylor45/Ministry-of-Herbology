@@ -81,3 +81,12 @@ moh_sha256() {
         moh_die "Need sha256sum or shasum to checksum $1."
     fi
 }
+
+# psql inside that container, against a database other than MOH_DB_NAME.
+# Creating and dropping a database cannot be done from inside it.
+moh_psql_db() {
+    db=$1
+    shift
+    docker exec -i "$MOH_DB_CID" \
+        psql -v ON_ERROR_STOP=1 -U "$MOH_DB_USER" -d "$db" "$@"
+}
