@@ -7,10 +7,10 @@
  * disagree, the contract is right and this file is the bug.
  */
 
-import type { Confidence, FrostAlert, Task } from '$api/client';
+import type { Confidence, FrostAlert, FrostReport, Task } from '$api/client';
 import { ApiError, BASE, get, type Fetcher } from '../../shared/http';
 
-export type { Confidence, FrostAlert, Task };
+export type { Confidence, FrostAlert, FrostReport, Task };
 
 export type SpecimenStatus =
   'thriving' | 'struggling' | 'dormant' | 'overwintering' | 'lost' | 'given_away' | 'archived';
@@ -163,7 +163,7 @@ export const reads = {
   careRules: (id: string, f: Fetcher) =>
     get<CareRule[]>(`/tending/care-rules?specimen_id=${id}`, f),
   waterBalance: (id: string, f: Fetcher) => get<WaterBalance>(`/almanac/water-balance/${id}`, f),
-  frost: (f: Fetcher) => get<FrostAlert[]>('/almanac/frost', f),
+  frost: (f: Fetcher) => get<FrostReport>('/almanac/frost', f),
 };
 
 /** Save a care value the reader has corrected.

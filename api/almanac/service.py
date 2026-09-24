@@ -310,10 +310,9 @@ def frost() -> list[dict[str, Any]]:
 def unassessable_for_frost() -> list[dict[str, str]]:
     """Plants whose frost risk cannot be judged, with the reason.
 
-    Not served on ``/almanac/frost`` — the contract types that response as a
-    list of ``FrostAlert`` and rule 1 keeps it that way. Exposed here so the
-    worker and the tests can assert that a plant is never dropped silently, and
-    offered to A as the reason to give the endpoint an envelope.
+    Served as the ``unassessable`` half of ``/almanac/frost`` since ADR 0018
+    gave that response an envelope. A plant is never dropped silently: if the
+    engine cannot judge it, it is named here with the reason it could not.
     """
     settings = weather_settings()
     contexts = world.specimen_contexts(settings)

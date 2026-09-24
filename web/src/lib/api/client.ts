@@ -29,6 +29,14 @@ export interface Task {
   deep_link: string;
 }
 
+/** One named reason an answer is worth less than a measurement (ADR 0018).
+ *  `detail` is a plain sentence, written by the engine to be shown as-is. */
+export interface Degradation {
+  code: string;
+  detail: string;
+  caps_at: Confidence;
+}
+
 export interface FrostAlert {
   id: string;
   specimen: SpecimenBrief;
@@ -38,6 +46,24 @@ export interface FrostAlert {
   action: 'bring_indoors' | 'cover' | 'monitor';
   advisory: string | null;
   state: 'open' | 'resolved' | 'expired';
+  confidence: Confidence;
+  degraded: boolean;
+  degradations: Degradation[];
+}
+
+export interface UnassessableSpecimen {
+  specimen_id: string;
+  reason: string;
+}
+
+/** Alerts and the plants the guard could not judge, together (ADR 0018).
+ *
+ *  Silence has two meanings — "nothing is at risk" and "I could not tell" — and
+ *  a bare list of alerts renders both the same way. Render `unassessable`.
+ */
+export interface FrostReport {
+  alerts: FrostAlert[];
+  unassessable: UnassessableSpecimen[];
 }
 
 export interface MorningRounds {
@@ -74,5 +100,5 @@ export const api = {
   morningRounds: (f?: typeof fetch) => get<MorningRounds>('/tending/rounds', f),
   specimens: (f?: typeof fetch) => get<{ items: Specimen[]; total: number }>('/specimens', f),
   specimen: (id: string, f?: typeof fetch) => get<Specimen>(`/specimens/${id}`, f),
-  frostAlerts: (f?: typeof fetch) => get<FrostAlert[]>('/almanac/frost', f),
+  frostAlerts: (f?: typeof fetch) => get<FrostReport>('/almanac/frost', f),
 };
