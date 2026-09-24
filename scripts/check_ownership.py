@@ -20,7 +20,16 @@ import sys
 #: docs/agents/README.md — the three are checked against each other below.
 OWNERSHIP: dict[str, list[str]] = {
     "A": ["."],  # architect and integrator
-    "B": ["infra/", ".github/", "Makefile", "scripts/", ".env.example", ".gitignore"],
+    "B": [
+        "infra/",
+        ".github/",
+        "Makefile",
+        "scripts/",
+        ".env.example",
+        ".gitignore",
+        # ADR 0019: the deployment guide is the deliverable, and it is B's.
+        "docs/deploy/",
+    ],
     "C": ["api/inventory/"],
     "D": ["workers/botany/"],
     "E": ["workers/weather/", "api/almanac/"],
