@@ -41,6 +41,7 @@ wants.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
@@ -357,9 +358,50 @@ async def publish_to_mqtt(ctx: dict[str, Any]) -> dict[str, Any]:
     what it *would* send — which is what the tests assert, and which is the
     useful half anyway: the bytes on the topic, not the library that carried
     them.
+
+    **S4 fills the seam this job was left with.** In S3 nothing put ``rounds``
+    or ``frost`` into ``ctx``, so a deployed worker published a permanent zero
+    on ``herbology/rounds/due`` and a permanent ``OFF`` on the frost
+    binary_sensor — the contract's topics, carrying nothing, which is precisely
+    the silent failure this workstream exists to prevent. It now reads the same
+    two endpoints the notification jobs read
+    (:mod:`workers.hub.notify.state`), so a household can hang a Home Assistant
+    automation off the frost sensor and have it mean something.
+
+    A read that fails is reported and **nothing is published**. Publishing a
+    zero because the API did not answer would retain that zero on the broker
+    until something replaced it, which is worse than an entity going
+    unavailable: the availability topic can say "we are not answering", and a
+    retained zero cannot be taken back.
     """
-    rounds = ctx.get("rounds") or {}
-    frost = ctx.get("frost") or {}
+    rounds = ctx.get("rounds")
+    frost = ctx.get("frost")
+    read_error: str | None = None
+    if rounds is None or frost is None:
+        from .notify.state import build_reader
+
+        settings = _settings(ctx)
+        reader = ctx.get("reader") or build_reader(settings)
+        try:
+            if rounds is None:
+                rounds = await reader.rounds()
+            if frost is None:
+                frost = await reader.frost()
+        except Exception as exc:  # noqa: BLE001 - reported, never raised at Arq
+            read_error = redact(
+                f"could not read the Ministry's state: {exc}", _secrets(settings)
+            )
+    if read_error:
+        return {
+            "job": "publish_to_mqtt",
+            "ok": False,
+            "error": read_error,
+            "published": 0,
+            "topics": [],
+        }
+
+    rounds = rounds or {}
+    frost = frost or {}
     specimens = ctx.get("specimens") or []
     version = str(ctx.get("sw_version") or "1.0.0")
 
@@ -370,18 +412,8 @@ async def publish_to_mqtt(ctx: dict[str, Any]) -> dict[str, Any]:
         ],
         sw_version=version,
     )
-    messages += rounds_messages(
-        due=int(rounds.get("due") or 0),
-        overdue=int(rounds.get("overdue") or 0),
-        tasks=rounds.get("tasks") or (),
-    )
-    messages += frost_messages(
-        active=bool(frost.get("active")),
-        night=frost.get("night"),
-        low_c=frost.get("low_c"),
-        specimens=frost.get("specimens") or (),
-        next_frost=frost.get("next"),
-    )
+    messages += rounds_messages(**_rounds_state(rounds))
+    messages += frost_messages(**_frost_state(frost))
     for row in specimens:
         messages += specimen_messages(
             str(row.get("specimen_id") or row.get("id")),
@@ -398,6 +430,103 @@ async def publish_to_mqtt(ctx: dict[str, Any]) -> dict[str, Any]:
         "retained": sum(1 for message in sent if message.retain),
         "topics": [message.topic for message in sent],
         "transport": type(publisher).__name__,
+    }
+
+
+def _rounds_state(rounds: Mapping[str, Any]) -> dict[str, Any]:
+    """``MorningRounds`` into the three things the contract's topics carry.
+
+    Accepts the already-counted shape too (``{"due": 4, "overdue": 1}``), which
+    is what a caller with the numbers to hand passes and what S3's tests use.
+    A ``due`` that is a list is counted; a ``due`` that is a number is taken as
+    the count.
+
+    ``overdue`` is derived from the tasks themselves rather than asked for:
+    ``MorningRounds`` has no overdue field, and a task whose ``due_at`` is
+    before today is what "overdue" means.
+    """
+    raw = rounds.get("due")
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return {
+            "due": int(raw),
+            "overdue": int(rounds.get("overdue") or 0),
+            "tasks": rounds.get("tasks") or (),
+        }
+    rows = raw if isinstance(raw, Sequence) and not isinstance(raw, str) else ()
+    tasks = [task for task in rows if isinstance(task, Mapping)]
+    today = str(rounds.get("date") or "")
+    overdue = sum(
+        1 for task in tasks if today and str(task.get("due_at") or "")[:10] < today
+    )
+    return {
+        "due": len(tasks),
+        "overdue": overdue,
+        "tasks": [_task_row(task) for task in tasks],
+    }
+
+
+def _task_row(task: Mapping[str, Any]) -> dict[str, Any]:
+    """The four fields ``mqtt._task_attributes`` allows, named as it expects.
+
+    The allow-list there is the guard; this is the translation. Rule 7's plain
+    title is what a dashboard shows, for the same reason a notification does.
+    """
+    specimen = task.get("specimen")
+    name = ""
+    if isinstance(specimen, Mapping):
+        name = str(specimen.get("nickname") or specimen.get("display_name") or "")
+    return {
+        "id": task.get("id", ""),
+        "specimen": name,
+        "kind": task.get("plain_title") or task.get("task_type") or "",
+        "due_on": str(task.get("due_at") or "")[:10] or None,
+    }
+
+
+def _frost_state(frost: Mapping[str, Any]) -> dict[str, Any]:
+    """``FrostReport`` into the frost binary_sensor and the next-frost date.
+
+    ``unassessable`` deliberately does not turn the sensor ``ON``. A plant that
+    could not be judged is not a plant known to be at risk, and an automation
+    that closed the greenhouse vents on "we do not know" would be acting on
+    nothing. It is carried in the attributes instead, where a dashboard can
+    show it and ``herbology/frost/next`` stays ``unknown`` rather than
+    becoming a date nobody computed.
+    """
+    if "active" in frost:
+        return {
+            "active": bool(frost.get("active")),
+            "night": frost.get("night"),
+            "low_c": frost.get("low_c"),
+            "specimens": frost.get("specimens") or (),
+            "next_frost": frost.get("next"),
+        }
+    alerts = [
+        alert
+        for alert in (frost.get("alerts") or ())
+        if isinstance(alert, Mapping) and str(alert.get("state") or "open") == "open"
+    ]
+    nights = sorted(
+        str(alert.get("night_of")) for alert in alerts if alert.get("night_of")
+    )
+    lows = [
+        float(alert["forecast_low_c"])
+        for alert in alerts
+        if isinstance(alert.get("forecast_low_c"), (int, float))
+    ]
+    names = []
+    for alert in alerts:
+        specimen = alert.get("specimen")
+        if isinstance(specimen, Mapping):
+            names.append(
+                str(specimen.get("nickname") or specimen.get("display_name") or "")
+            )
+    return {
+        "active": bool(alerts),
+        "night": nights[0] if nights else None,
+        "low_c": min(lows) if lows else None,
+        "specimens": [name for name in names if name],
+        "next_frost": nights[0] if nights else None,
     }
 
 

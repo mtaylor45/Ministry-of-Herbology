@@ -407,3 +407,110 @@ def test_nothing_in_the_notification_path_opens_a_socket(run, ctx, channel):
     run(jobs.notify_frost({**ctx, "now": NIGHT}))
     assert isinstance(channel, MemoryChannel)
     assert len(channel.sent) == 2
+
+
+# ---------------------------------------------- the MQTT seam, filled at last
+
+
+def test_the_mqtt_job_publishes_the_real_rounds_rather_than_a_zero(run, ctx):
+    """S3 left ``publish_to_mqtt`` with a ``ctx`` nothing filled.
+
+    A deployed worker therefore published a permanent ``0`` on
+    ``herbology/rounds/due`` and a permanent ``OFF`` on the frost sensor — the
+    contract's topics carrying nothing, which is the silent failure this
+    workstream exists to prevent.
+    """
+    from workers.hub import tasks
+    from workers.hub.mqtt import MemoryPublisher
+
+    publisher = MemoryPublisher()
+    report = run(
+        tasks.publish_to_mqtt(
+            {
+                "settings": ctx["settings"],
+                "reader": ctx["reader"],
+                "publisher": publisher,
+            }
+        )
+    )
+    assert report["ok"] is True
+    assert publisher.payload_for("herbology/rounds/due") == "3"
+    assert publisher.payload_for("herbology/frost/state") == "ON"
+    assert publisher.payload_for("herbology/frost/next") == "2026-10-23"
+
+
+def test_the_mqtt_job_publishes_nothing_when_it_could_not_read(run, ctx):
+    """A retained zero cannot be taken back.
+
+    The availability topic can say "we are not answering"; a retained ``0`` on
+    a task count says "there is nothing to do", forever, to anything watching.
+    """
+    from workers.hub import tasks
+    from workers.hub.mqtt import MemoryPublisher
+
+    async def broken():
+        raise RuntimeError("ministry_api: connection refused")
+
+    ctx["reader"].rounds = broken
+    publisher = MemoryPublisher()
+    report = run(
+        tasks.publish_to_mqtt(
+            {
+                "settings": ctx["settings"],
+                "reader": ctx["reader"],
+                "publisher": publisher,
+            }
+        )
+    )
+    assert report["ok"] is False
+    assert publisher.sent == []
+
+
+def test_a_plant_that_could_not_be_assessed_does_not_turn_the_frost_sensor_on(run, ctx):
+    """An automation that closed the vents on "we do not know" acts on nothing."""
+    from workers.hub import tasks
+    from workers.hub.mqtt import MemoryPublisher
+
+    async def only_unassessable():
+        return {
+            "alerts": [],
+            "unassessable": [{"specimen_id": "x", "reason": "no data"}],
+        }
+
+    ctx["reader"].frost = only_unassessable
+    publisher = MemoryPublisher()
+    run(
+        tasks.publish_to_mqtt(
+            {
+                "settings": ctx["settings"],
+                "reader": ctx["reader"],
+                "publisher": publisher,
+            }
+        )
+    )
+    assert publisher.payload_for("herbology/frost/state") == "OFF"
+    assert publisher.payload_for("herbology/frost/next") == "unknown"
+
+
+def test_the_mqtt_attributes_carry_the_plain_title_and_no_more(run, ctx):
+    """The allow-list in ``mqtt._task_attributes`` is the guard; this is what
+    reaches it. A broker retains what it is given."""
+    import json
+
+    from workers.hub import tasks
+    from workers.hub.mqtt import MemoryPublisher
+
+    publisher = MemoryPublisher()
+    run(
+        tasks.publish_to_mqtt(
+            {
+                "settings": ctx["settings"],
+                "reader": ctx["reader"],
+                "publisher": publisher,
+            }
+        )
+    )
+    payload = json.loads(publisher.payload_for("herbology/rounds/due/attributes"))
+    first = payload["tasks"][0]
+    assert set(first) == {"id", "specimen", "kind", "due_on"}
+    assert first["kind"].startswith("Water ")

@@ -406,3 +406,27 @@ def test_a_health_notification_changes_when_the_fault_changes(recipient):
         {"integrations": [integration(status="stale")]}, recipient
     )
     assert down.dedupe_key != stale.dedupe_key
+
+
+# ----------------------------------- the irrigation path, modelled not faked
+
+
+def test_a_watering_the_rain_already_covered_is_never_notified(recipient):
+    """``MorningRounds`` puts those in ``satisfied[]``, and only ``due`` is read.
+
+    This is also where an irrigation controller's waterings will arrive the day
+    one exists (ADR 0010: none does). Nothing here needs to change for that —
+    a task the app did not ask a person to do is simply not in ``due``.
+    """
+    payload = rounds(due=[], satisfied=[task(status="satisfied", satisfied_by="rain")])
+    assert copy.rounds_notification(payload, recipient, today=TODAY) is None
+
+
+def test_a_partly_satisfied_day_notifies_only_about_what_is_left(recipient):
+    payload = rounds(
+        due=[task(plain_title="Water Bertram")],
+        satisfied=[task(id="t-2", plain_title="Water Gilderoy", status="satisfied")],
+    )
+    notification = copy.rounds_notification(payload, recipient, today=TODAY)
+    assert notification.title == "Today's rounds: 1 task"
+    assert "Water Gilderoy" not in notification.body
