@@ -110,11 +110,10 @@ def test_every_discovery_config_carries_the_shared_device_and_availability():
 
 
 def test_the_device_block_matches_the_contract_word_for_word():
-    block = mqtt.device_block("1.0.0")
-    quoted = json.loads(re.search(r'```json\n(.*?)\n```', CONTRACT, re.S).group(1).replace(
-        '"<app version>"', '"1.0.0"'
-    ))
-    assert block == quoted
+    quoted = re.search(r"```json\n(.*?)\n```", CONTRACT, re.DOTALL)
+    assert quoted is not None
+    block = json.loads(quoted.group(1).replace('"<app version>"', '"1.0.0"'))
+    assert mqtt.device_block("1.0.0") == block
 
 
 def test_the_last_will_is_offline_on_the_availability_topic():
@@ -130,15 +129,15 @@ def test_an_unknown_deficit_is_published_as_unknown_not_as_zero():
     """A zero deficit means "watered this morning"; an unknown one means the
     water balance could not answer. Under ADR 0010 that engine is the only
     thing deciding whether an outdoor plant gets water."""
-    (_, deficit) = specimen_messages(SPECIMEN, water_due=False, deficit_mm=None)
+    _, deficit = specimen_messages(SPECIMEN, water_due=False, deficit_mm=None)
     assert deficit.payload == "unknown"
 
-    (_, zero) = specimen_messages(SPECIMEN, water_due=False, deficit_mm=0.0)
+    _, zero = specimen_messages(SPECIMEN, water_due=False, deficit_mm=0.0)
     assert zero.payload == "0.0"
 
 
 def test_an_unknown_next_frost_is_published_as_unknown():
-    """"We do not know when the next frost is" and "there is no frost coming"
+    """ "We do not know when the next frost is" and "there is no frost coming"
     are different claims, and only one is safe to make."""
     messages = {m.topic: m.payload for m in frost_messages(active=False)}
     assert messages["herbology/frost/next"] == "unknown"
@@ -210,7 +209,9 @@ def test_the_task_attributes_are_an_allow_list_not_a_copy():
 
 def test_publishing_guards_every_message(run):
     publisher = MemoryPublisher()
-    run(publish_all(publisher, [availability(True), *rounds_messages(due=1, overdue=0)]))
+    run(
+        publish_all(publisher, [availability(True), *rounds_messages(due=1, overdue=0)])
+    )
     assert publisher.topics()[0] == AVAILABILITY_TOPIC
     assert publisher.payload_for("herbology/rounds/due") == "1"
 

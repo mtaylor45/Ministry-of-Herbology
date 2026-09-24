@@ -29,7 +29,9 @@ def test_no_outdoor_location_gets_a_thermostat(sensor_sources):
     Inventing an HA sensor for one would put two different answers to the same
     question into one database.
     """
-    assert not any(row.name in {"South Border", "Covered Porch"} for row in sensor_sources)
+    assert not any(
+        row.name in {"South Border", "Covered Porch"} for row in sensor_sources
+    )
 
 
 def test_the_mock_world_invents_no_soil_probe(sensor_sources):
@@ -67,9 +69,7 @@ def test_one_poll_is_one_request_however_many_sources(
     assert [path for _, path, _ in fetcher.calls] == ["/states"]
 
 
-def test_every_reading_carries_the_room_it_belongs_to(
-    run, source, sensor_sources, now
-):
+def test_every_reading_carries_the_room_it_belongs_to(run, source, sensor_sources, now):
     result = run(source.poll(sensor_sources, now=now))
     by_location = {reading.location_id for reading in result.readings}
     assert by_location == {row.location_id for row in sensor_sources}
@@ -83,7 +83,9 @@ def test_a_chatty_home_assistant_is_ignored_rather_than_stored(
     ignore all of them."""
     result = run(source.poll(sensor_sources, now=now))
     entity_ids = {reading.entity_id for reading in result.readings}
-    assert not any(entity.startswith(("light.", "switch.", "weather.")) for entity in entity_ids)
+    assert not any(
+        entity.startswith(("light.", "switch.", "weather.")) for entity in entity_ids
+    )
 
 
 def test_an_entity_home_assistant_does_not_have_is_named(
@@ -179,9 +181,7 @@ def test_every_synthesised_payload_says_it_is_synthesised(run, fetcher):
 
 def test_the_mocks_freshness_is_relative_to_the_injected_clock(run, fetcher, now):
     result = run(fetcher.get_json("home_assistant", "/states"))
-    stamps = {
-        row["last_updated"] for row in result.payload if "last_updated" in row
-    }
+    stamps = {row["last_updated"] for row in result.payload if "last_updated" in row}
     assert (now - timedelta(seconds=120)).isoformat() in stamps
 
 

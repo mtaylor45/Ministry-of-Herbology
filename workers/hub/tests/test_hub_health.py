@@ -26,7 +26,7 @@ TOKEN = "eyJhbGciOiJIUzI1NiJ9.aVeryLongLivedAccessToken.signaturegoeshere"
 
 
 def integration(**kwargs) -> IntegrationHealth:
-    defaults = dict(id="i-1", kind="home_assistant", name="Home Assistant")
+    defaults = {"id": "i-1", "kind": "home_assistant", "name": "Home Assistant"}
     return IntegrationHealth(**{**defaults, **kwargs})
 
 

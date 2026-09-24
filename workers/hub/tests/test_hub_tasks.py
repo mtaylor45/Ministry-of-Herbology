@@ -11,6 +11,7 @@ is this workstream's failure mode.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 
 import pytest
 
@@ -51,15 +52,11 @@ def ctx(settings, live_clock_source, sensor_sources):
 def test_the_poll_schedule_meets_the_sprints_five_to_fifteen_minutes():
     """Read off the cron rather than off the docstring, so a schedule that
     drifts out of the band fails here rather than in a demo."""
-    from arq import cron
-
-    assert cron  # the dependency the cron jobs are built from
     jobs = tasks.WorkerSettings.cron_jobs
+    assert jobs, "arq is a declared dependency; the schedule must be built"
     poll = next(job for job in jobs if job.coroutine is tasks.poll_home_assistant)
     minutes = sorted(poll.minute)
-    gaps = {
-        b - a for a, b in zip(minutes, minutes[1:], strict=False)
-    } | {60 - minutes[-1] + minutes[0]}
+    gaps = {b - a for a, b in pairwise(minutes)} | {60 - minutes[-1] + minutes[0]}
     assert gaps == {5}
     assert poll.run_at_startup is True
 
@@ -100,7 +97,7 @@ def test_the_rows_reach_the_hypertable_and_the_rollup_is_refreshed(
 def test_a_successful_run_stamps_last_ok_at_and_records_the_run(run, ctx, connection):
     run(tasks.poll_home_assistant({**ctx, "connection": connection}))
     assert connection.matching("last_ok_at = $2")
-    (_, args), = connection.matching("INSERT INTO job_run")
+    ((_, args),) = connection.matching("INSERT INTO job_run")
     assert args[1] == "poll_home_assistant"
     assert args[4] is True
 
@@ -126,7 +123,7 @@ def test_a_hub_that_is_off_lands_on_last_error_rather_than_in_a_log(
     )
     assert report["ok"] is False
     assert "unreachable" in report["error"]
-    (_, args), = connection.matching("SET last_error")
+    ((_, args),) = connection.matching("SET last_error")
     assert "unreachable" in args[1]
     # The last success is left alone: it is still true.
     assert connection.matching("last_ok_at = $2") == []
@@ -147,9 +144,7 @@ def test_a_working_hub_with_a_broken_mapping_is_not_counted_as_success(
         tasks.poll_home_assistant(
             {
                 "settings": settings,
-                "source": HomeAssistantSource(
-                    RecordedFetcher(settings), settings
-                ),
+                "source": HomeAssistantSource(RecordedFetcher(settings), settings),
                 "sources": [typo],
                 "connection": connection,
             }
@@ -242,7 +237,9 @@ def test_a_deployment_with_every_source_disabled_does_not_look_healthy(
     report as working forever.
     """
     disabled = [
-        SensorSource(**{**row.to_dict(), "enabled": False, "external_ids": row.external_ids})
+        SensorSource(
+            **{**row.to_dict(), "enabled": False, "external_ids": row.external_ids}
+        )
         for row in sensor_sources
     ]
     report = run(
@@ -277,9 +274,7 @@ def test_a_source_that_is_not_due_yet_is_not_polled(run, settings):
     """The cron sets the finest cadence; each row decides whether it wants
     reading this time round. A thermostat is not a soil probe."""
     recent = hourly_source(datetime.now(UTC) - timedelta(minutes=5))
-    report = run(
-        tasks.poll_home_assistant({"settings": settings, "sources": [recent]})
-    )
+    report = run(tasks.poll_home_assistant({"settings": settings, "sources": [recent]}))
     assert report["polled"] == 0
 
 
@@ -441,7 +436,10 @@ def test_supported_metrics_is_still_importable_from_tasks():
     assert tasks.MQTT_PREFIX == "herbology"
     assert tasks.DISCOVERY_PREFIX == "homeassistant"
     assert tasks.state_topic("frost", "state") == "herbology/frost/state"
-    assert tasks.discovery_topic("sensor", "x") == "homeassistant/sensor/herbology/x/config"
+    assert (
+        tasks.discovery_topic("sensor", "x")
+        == "homeassistant/sensor/herbology/x/config"
+    )
 
 
 def test_every_job_is_registered_with_arq():

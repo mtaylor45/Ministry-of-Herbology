@@ -10,15 +10,15 @@ NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 
 
 def source(**kwargs) -> SensorSource:
-    defaults = dict(
-        id="source-1",
-        name="Study",
-        external_ids={
+    defaults = {
+        "id": "source-1",
+        "name": "Study",
+        "external_ids": {
             "temperature_c": "sensor.study_temperature",
             "humidity_pct": "sensor.study_humidity",
         },
-        location_id="location-1",
-    )
+        "location_id": "location-1",
+    }
     return SensorSource(**{**defaults, **kwargs})
 
 

@@ -87,7 +87,7 @@ def test_a_source_is_stamped_with_its_newest_reading_not_its_last(run, connectio
             [reading(time=late), reading("humidity_pct", 44.0, time=early)],
         )
     )
-    (_, args), = connection.matching("UPDATE sensor_source")
+    ((_, args),) = connection.matching("UPDATE sensor_source")
     assert args[1] == late
 
 
@@ -132,7 +132,7 @@ def test_the_job_run_row_carries_the_report_as_json(run, connection):
             detail={"skipped": [{"entity_id": "sensor.x", "reason": "stale_entity"}]},
         )
     )
-    (_, args), = connection.matching("INSERT INTO job_run")
+    ((_, args),) = connection.matching("INSERT INTO job_run")
     assert args[1] == "poll_home_assistant"
     assert args[4] is False
     assert "stale_entity" in args[5]
@@ -140,16 +140,17 @@ def test_the_job_run_row_carries_the_report_as_json(run, connection):
 
 def test_only_the_contracts_own_aggregates_can_be_refreshed():
     """The view name is interpolated because it is an identifier, not a value."""
-    sql, params = store.refresh_aggregate_sql("reading_hourly", date(2026, 6, 15), date(2026, 6, 16))
+    start, end = date(2026, 6, 15), date(2026, 6, 16)
+    sql, params = store.refresh_aggregate_sql("reading_hourly", start, end)
     assert sql.startswith("CALL refresh_continuous_aggregate('reading_hourly'")
-    assert params == [date(2026, 6, 15), date(2026, 6, 16)]
+    assert params == [start, end]
 
     with pytest.raises(ValueError, match="not a continuous aggregate"):
-        store.refresh_aggregate_sql("reading; DROP TABLE reading", date.today(), date.today())
+        store.refresh_aggregate_sql("reading; DROP TABLE reading", start, end)
 
     with pytest.raises(ValueError):
         # E's view, over a table this worker does not write.
-        store.refresh_aggregate_sql("weather_daily", date.today(), date.today())
+        store.refresh_aggregate_sql("weather_daily", start, end)
 
 
 def test_the_office_never_reads_integration_config():

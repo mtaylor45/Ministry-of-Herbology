@@ -146,9 +146,7 @@ def test_urls_are_built_without_doubled_slashes():
 
 def test_the_websocket_url_is_derived_rather_than_configured_twice():
     """Two base URLs for one Home Assistant is two things to get wrong."""
-    assert (
-        settings_with().ha_websocket_url == "ws://hub.invalid:8123/api/websocket"
-    )
+    assert settings_with().ha_websocket_url == "ws://hub.invalid:8123/api/websocket"
     secure = HubSettings(ha_base_url="https://hub.example/")
     assert secure.ha_websocket_url == "wss://hub.example/api/websocket"
 

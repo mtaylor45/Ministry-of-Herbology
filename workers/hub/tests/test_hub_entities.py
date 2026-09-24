@@ -218,14 +218,9 @@ def test_supported_metrics_match_the_contracts_check_constraint():
     from pathlib import Path
 
     schema = (
-        Path(__file__).resolve().parents[3]
-        / "contracts"
-        / "schema"
-        / "001_init.sql"
+        Path(__file__).resolve().parents[3] / "contracts" / "schema" / "001_init.sql"
     ).read_text()
-    block = re.search(
-        r"CREATE TABLE reading \((.*?)\n\);", schema, re.S
-    )
+    block = re.search(r"CREATE TABLE reading \((.*?)\n\);", schema, re.DOTALL)
     assert block is not None
     allowed = set(re.findall(r"'([a-z0-9_]+)'", block.group(1)))
     assert set(SUPPORTED_METRICS) == allowed

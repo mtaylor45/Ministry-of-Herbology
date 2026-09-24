@@ -163,7 +163,15 @@ def test_reconnects_are_jittered_so_a_household_does_not_retry_in_lockstep():
     import random
 
     backoff = Backoff(first_s=10.0, jitter=0.25, _random=random.Random(0))
-    delays = {round(Backoff(first_s=10.0, jitter=0.25, _random=random.Random(seed)).next_delay(), 6) for seed in range(5)}
+    delays = {
+        round(
+            Backoff(
+                first_s=10.0, jitter=0.25, _random=random.Random(seed)
+            ).next_delay(),
+            6,
+        )
+        for seed in range(5)
+    }
     assert len(delays) > 1
     assert all(7.5 <= delay <= 12.5 for delay in delays)
     backoff.reset()
