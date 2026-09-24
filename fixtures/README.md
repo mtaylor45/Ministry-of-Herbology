@@ -19,6 +19,7 @@ that.
 | `species/species.json` | Eight species with fully cited care profiles |
 | `species/sources.json` | The source records those citations point at |
 | `specimens/specimens.json` | Twelve specimens: indoor, outdoor, container, in-ground, a group |
+| `members/members.json` | The household: one notified about everything, one about frost only, one not a recipient at all ([why](members/README.md)) |
 | `weather/baseline_30d.json` | 30 days of ordinary observations, for history views, closing on a soaking |
 | `scenarios/drought.json` | 21 rainless days; the deficit must cross threshold |
 | `scenarios/storm.json` | Ten rainless days of July heat, broken on the last day by 38 mm; due waterings become "satisfied by rain" |
