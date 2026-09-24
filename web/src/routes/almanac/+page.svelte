@@ -99,6 +99,7 @@
 
     <Card themed="The shape of the week" plain="High and low temperature" level={2}>
       <Chart
+        showTitle={false}
         plain="Daily high and low"
         themed="Warmth ahead"
         unit="°C"

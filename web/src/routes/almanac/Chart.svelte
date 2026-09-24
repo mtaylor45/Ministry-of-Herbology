@@ -30,6 +30,7 @@
     series,
     height = 220,
     xIsTime = true,
+    showTitle = true,
     table,
     tableLabel = 'The numbers',
   }: {
@@ -46,6 +47,10 @@
     height?: number;
     /** x is unix seconds. False plots a plain numeric axis. */
     xIsTime?: boolean;
+    /** False where the card around the chart already names it. The name is
+     *  still rendered for a screen reader — a figure without one is a figure
+     *  that announces itself as nothing. */
+    showTitle?: boolean;
     /** The same values as a table — the chart's text equivalent. */
     table?: Snippet;
     tableLabel?: string;
@@ -120,12 +125,17 @@
                     stroke,
                     width: 2,
                     dash: spec.dash ? [6, 4] : undefined,
-                    fill: spec.fill ? stroke : undefined,
+                    // Bars are read as quantity, so they are filled; a line is
+                    // read as a trend and is not.
+                    fill: spec.fill || spec.bars ? stroke : undefined,
                     // `spanGaps: false` is the default and is the point: a day
                     // with no reading leaves a hole rather than a straight line
                     // drawn across the outage.
-                    points: { show: points <= 24 },
-                    paths: spec.bars ? UPlot.paths.bars?.({ size: [0.6, 24] }) : undefined,
+                    //
+                    // A bar already marks where its value is; a point on top of
+                    // one turns a column of rain into a lollipop.
+                    points: { show: !spec.bars && points <= 24 },
+                    paths: spec.bars ? UPlot.paths.bars?.({ size: [0.8, 24] }) : undefined,
                   };
                 }),
               ],
@@ -169,7 +179,7 @@
 
 <figure class="chart">
   <figcaption>
-    <span class="name">
+    <span class="name" class:visually-hidden={!showTitle}>
       {#if themed}<span class="themed">{themed}</span>{/if}
       <span class="plain">{plain}{unit ? ` (${unit})` : ''}</span>
     </span>

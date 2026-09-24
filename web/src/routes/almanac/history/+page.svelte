@@ -133,6 +133,7 @@
         </p>
       {:else}
         <Chart
+          showTitle={false}
           plain={`${METRICS[data.metric].plain}${showIndoor ? ', indoors and out' : ', outdoors'}`}
           themed={METRICS[data.metric].themed}
           {unit}

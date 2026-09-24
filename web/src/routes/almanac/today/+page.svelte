@@ -83,6 +83,7 @@
 
     <Card themed="The hours" plain="Temperature through today" level={2}>
       <Chart
+        showTitle={false}
         plain="Temperature by hour"
         themed="The warmth of the day"
         unit="°C"
@@ -117,6 +118,7 @@
     <Card themed="What falls" plain="Rain by hour" level={2}>
       {#if rain > 0}
         <Chart
+          showTitle={false}
           plain="Rain by hour"
           themed="What falls"
           unit="mm"
