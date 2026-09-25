@@ -20,9 +20,9 @@ that.
 | `species/sources.json` | The source records those citations point at |
 | `specimens/specimens.json` | Twelve specimens: indoor, outdoor, container, in-ground, a group |
 | `members/members.json` | The household: one notified about everything, one about frost only, one not a recipient at all ([why](members/README.md)) |
-| `weather/baseline_30d.json` | 30 days of ordinary observations, for history views, closing on a soaking |
+| `weather/baseline_30d.json` | 30 days of ordinary observations, for history views. The shipped default: a deployment that selects no scenario sees this and nothing else |
 | `scenarios/drought.json` | 21 rainless days; the deficit must cross threshold |
-| `scenarios/storm.json` | Ten rainless days of July heat, broken on the last day by 38 mm; due waterings become "satisfied by rain" |
+| `scenarios/storm.json` | Six rainless days of July heat, broken on day 7 by 38 mm, then three days rebuilding; due waterings become "satisfied by rain" |
 | `scenarios/frost.json` | A 72h cooling trend into −2 °C with an NWS advisory |
 
 ## Scenario format
@@ -49,15 +49,28 @@ was never due, and a watering that was never owed cannot be settled. The dry
 spell is ten days now and the claim is true. Read the engine before editing an
 expectation; write the ADR when the engine is the thing that is wrong.
 
-### Why a scenario ends on its wet day
+### Which day a scenario is read on
 
-`BalanceSeries.status` is the status of the series' **newest** day. A storm
-whose rain falls in the middle and then runs on for three dry days reports `ok`
-at the end, and the `satisfied` state — the one thing the scenario exists to
-show — never reaches a screen. `storm.json` therefore ends on the soaking, and
-`weather/baseline_30d.json` does too, so that the "settled without you" section
-of Morning Rounds is populated in the default mock deployment rather than only
-in a unit test. Workstream J raised that gap at the end of S4.
+`BalanceSeries.status` is the status of the series' **newest** day. `storm.json`
+runs three days past its downpour, so a balance replayed to the end honestly
+reports `ok` — the deficit has begun to rebuild — and the `satisfied` state the
+scenario exists to show is gone.
+
+Stand on the day it rained: Workstream E's S5 selector takes
+`MOH_WEATHER_SCENARIO=storm` and `MOH_WEATHER_SCENARIO_DAY=2026-07-07`, and
+every `expect` row in that file is about that day. The file's
+`expect.read_on_the_rain_day` says so, and `tests/engines/` asserts that the
+recording really does run past the rain, because trimming the trailing days
+would hide the problem rather than explain it — and would delete the one case
+E's day-setting was built for.
+
+For one sprint-day in S5 this repository took the other route: the baseline
+recording was given a 32 mm closing day so that the default deployment would
+show a settled watering, which is what Workstream J asked for at the end of S4.
+That was the wrong fix and is reverted. **The selector is the answer**, and the
+baseline's job is to be the deployment that changes nothing — a principle
+`api/almanac/tests/` now pins from its own side. J's screen is developed under
+`MOH_WEATHER_SCENARIO=storm`.
 
 ## Determinism
 

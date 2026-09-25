@@ -5,8 +5,8 @@
   "days": [
     {
       "date": "2026-07-01",
-      "tmin_c": 17.5,
-      "tmax_c": 28.0,
+      "tmin_c": 17.6,
+      "tmax_c": 28.4,
       "precip_mm": 0.0,
       "et0_mm": 4.6,
       "condition": "clear"
@@ -14,139 +14,132 @@
     {
       "date": "2026-07-02",
       "tmin_c": 18.0,
-      "tmax_c": 29.2,
+      "tmax_c": 29.3,
       "precip_mm": 0.0,
-      "et0_mm": 4.9,
+      "et0_mm": 4.8,
       "condition": "clear"
     },
     {
       "date": "2026-07-03",
-      "tmin_c": 18.6,
-      "tmax_c": 30.1,
+      "tmin_c": 18.4,
+      "tmax_c": 30.2,
       "precip_mm": 0.0,
-      "et0_mm": 5.1,
+      "et0_mm": 5.0,
       "condition": "clear"
     },
     {
       "date": "2026-07-04",
-      "tmin_c": 19.2,
+      "tmin_c": 18.8,
       "tmax_c": 31.0,
       "precip_mm": 0.0,
-      "et0_mm": 5.3,
+      "et0_mm": 5.2,
       "condition": "clear"
     },
     {
       "date": "2026-07-05",
-      "tmin_c": 19.8,
-      "tmax_c": 31.8,
+      "tmin_c": 19.1,
+      "tmax_c": 31.6,
       "precip_mm": 0.0,
-      "et0_mm": 5.5,
+      "et0_mm": 5.4,
       "condition": "clear"
     },
     {
       "date": "2026-07-06",
-      "tmin_c": 20.4,
-      "tmax_c": 32.5,
+      "tmin_c": 19.4,
+      "tmax_c": 32.1,
       "precip_mm": 0.0,
-      "et0_mm": 5.7,
+      "et0_mm": 5.5,
       "condition": "clear"
     },
     {
       "date": "2026-07-07",
-      "tmin_c": 21.0,
-      "tmax_c": 33.1,
-      "precip_mm": 0.0,
-      "et0_mm": 5.8,
-      "condition": "clear"
+      "tmin_c": 16.0,
+      "tmax_c": 22.0,
+      "precip_mm": 38.0,
+      "et0_mm": 1.2,
+      "condition": "rain"
     },
     {
       "date": "2026-07-08",
-      "tmin_c": 21.3,
-      "tmax_c": 33.4,
+      "tmin_c": 16.0,
+      "tmax_c": 25.0,
       "precip_mm": 0.0,
-      "et0_mm": 5.8,
-      "condition": "clear"
+      "et0_mm": 3.4,
+      "condition": "cloudy"
     },
     {
       "date": "2026-07-09",
-      "tmin_c": 21.1,
-      "tmax_c": 32.6,
+      "tmin_c": 16.0,
+      "tmax_c": 25.0,
       "precip_mm": 0.0,
-      "et0_mm": 5.5,
-      "condition": "partly_cloudy"
+      "et0_mm": 3.4,
+      "condition": "cloudy"
     },
     {
       "date": "2026-07-10",
-      "tmin_c": 20.6,
-      "tmax_c": 30.4,
+      "tmin_c": 16.0,
+      "tmax_c": 25.0,
       "precip_mm": 0.0,
-      "et0_mm": 4.8,
-      "condition": "partly_cloudy"
-    },
-    {
-      "date": "2026-07-11",
-      "tmin_c": 18.2,
-      "tmax_c": 21.5,
-      "precip_mm": 38.0,
-      "et0_mm": 1.5,
-      "condition": "rain"
+      "et0_mm": 3.4,
+      "condition": "cloudy"
     }
   ],
   "advisories": [],
   "expect": {
-    "description": "Ten rainless days of building July heat, broken on the last day by 38 mm. The scenario ends on the wet day on purpose: the balance reports the state of its newest day, so a scenario that ran on past the rain would report 'ok' and the satisfied state — the one thing this scenario exists to show — would never reach a screen. Outdoor specimens under open sky show 'satisfied by rain' rather than having their task vanish. Covered and indoor ones do not, and a plant that was never due is 'ok' and not 'satisfied'.",
-    "rain_day_index": 10,
+    "description": "Six rainless days of building July heat, broken on day 7 by 38 mm, then three days in which the deficit begins to rebuild. Outdoor specimens under open sky that had crossed their threshold show 'satisfied by rain' rather than having their task vanish. Covered and indoor ones do not. And a plant that had not crossed its threshold is 'ok', not 'satisfied': the rain settled nothing it owed.",
+    "rain_day_index": 6,
+    "read_on_the_rain_day": "Every assertion below is about day 6. The water balance reports the state of its newest day, so a series replayed to day 9 honestly says 'ok' \u2014 the deficit has rebuilt \u2014 and the satisfied state is gone. Set MOH_WEATHER_SCENARIO_DAY=2026-07-07 to stand on the day it rained (Workstream E, S5). That is the switch this scenario is read through, and the reason the recording does not simply stop at the downpour.",
     "assertions": [
       {
         "specimen": "01890040-0000-7000-8000-000000000004",
-        "on_day": 10,
+        "on_day": 6,
         "water_task_status": "satisfied",
         "satisfied_by": "rain",
-        "note": "45 L lemon on the uncovered Back Terrace; due from day 4"
+        "note": "45 L lemon on the uncovered Back Terrace: 0.9 x 30.5 mm of ET0 over six days crosses its 19.65 mm threshold, and 38 mm clears it"
       },
       {
         "specimen": "01890040-0000-7000-8000-000000000010",
-        "on_day": 10,
+        "on_day": 6,
         "water_task_status": "satisfied",
         "satisfied_by": "rain",
-        "note": "8 L basil on the same terrace; a small pot is due by day 1"
-      },
-      {
-        "specimen": "01890040-0000-7000-8000-000000000007",
-        "on_day": 10,
-        "water_task_status": "satisfied",
-        "satisfied_by": "rain",
-        "note": "in-ground rose in the South Border: a 60 mm profile at K_c 0.85 needs eight days of this heat to cross, which is why the dry spell is ten and not six"
-      },
-      {
-        "specimen": "01890040-0000-7000-8000-000000000008",
-        "on_day": 10,
-        "water_task_status": "satisfied",
-        "satisfied_by": "rain",
-        "note": "in-ground hostas in the uncovered North Shade Bed"
+        "note": "8 L basil on the same terrace; a small pot is due by day 2"
       },
       {
         "specimen": "01890040-0000-7000-8000-000000000005",
-        "on_day": 10,
+        "on_day": 6,
         "water_task_status": "due",
-        "note": "Covered Porch: f_cover = 0, so the rain never reaches it and the watering stays owed"
+        "note": "Covered Porch: f_cover = 0, so the rain never reaches it and the watering stays owed. The most-got-wrong term in the equation"
       },
       {
         "specimen": "01890040-0000-7000-8000-000000000011",
-        "on_day": 10,
+        "on_day": 6,
         "water_task_status": "due",
         "note": "also on the Covered Porch, and also still owed"
       },
       {
-        "specimen": "01890040-0000-7000-8000-000000000006",
-        "on_day": 10,
+        "specimen": "01890040-0000-7000-8000-000000000007",
+        "on_day": 6,
         "water_task_status": "ok",
         "satisfied_by": null,
-        "note": "the drought-adapted lavender hedge never crossed its threshold in ten days, so the rain settled nothing. 'ok' is not 'satisfied': a watering that was never owed must not be reported as one the sky did for you"
+        "note": "The in-ground rose. This assertion said 'satisfied' from S0 to S5 and was never true: a 60 mm soil profile at K_c 0.85 needs 42 mm of ET0 to cross its threshold and six days of this heat supply 30.5, so the rose was never due. A watering that was never owed cannot be settled by rain, and reporting it as such would claim credit for work nobody needed"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000006",
+        "on_day": 6,
+        "water_task_status": "ok",
+        "satisfied_by": null,
+        "note": "the drought-adapted lavender hedge, for the same reason and more so at K_c 0.45. 'ok' is not 'satisfied', and keeping them apart is what makes the satisfied section mean anything"
+      },
+      {
+        "specimen": "01890040-0000-7000-8000-000000000008",
+        "on_day": 6,
+        "water_task_status": "ok",
+        "satisfied_by": null,
+        "note": "in-ground hostas in the uncovered North Shade Bed; also never due"
       },
       {
         "specimen": "01890040-0000-7000-8000-000000000001",
-        "on_day": 10,
+        "on_day": 6,
         "water_task_status": "due",
         "note": "indoor, interval rule, unaffected by weather"
       },

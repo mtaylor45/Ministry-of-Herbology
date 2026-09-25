@@ -1,221 +1,223 @@
-"""The whole app under ``storm`` and under ``drought``, driven by the fixtures.
+"""The fixtures' own ``expect`` blocks, asserted against the running app.
 
-Owner: Workstream L. **Skipped until Workstream E's scenario selector lands**
-(``ws-e/s5-water-balance``). Nothing here is a second mechanism: the seam is
-``workers.weather.world.weather_days(..., scenario=...)``, which already takes
-the argument, lifted to a setting so the *running app* can be put under a
-scenario instead of the baseline. This suite reads that setting off
-``WeatherSettings`` and runs when it exists.
+Owner: Workstream L. ``fixtures/README.md`` has promised since S0 that "the
+``expect`` block is the contract: ``tests/`` asserts each one". Until Workstream
+E's scenario selector landed in S5 nothing could: the running app only ever saw
+``weather/baseline_30d.json``, so an expectation could be checked against the
+engine's arithmetic — which ``tests/engines/`` does — but never against a
+screen. This file is the promise kept.
 
-What it gains over the rest of the suite, which drives the same code paths on
-the shipped baseline: the fixtures' ``expect`` blocks become executable.
-``fixtures/README.md`` says the ``expect`` block is the contract and that
-``tests/`` asserts each one — until the selector exists, only the engine-level
-tests in ``tests/engines/`` can, and they assert arithmetic rather than screens.
-These assert screens.
+The seam is ``MOH_WEATHER_SCENARIO`` and ``MOH_WEATHER_SCENARIO_DAY``, set
+through the environment because that is the only route a deployment has (ADR
+0019). It is not a test hook: an operator who wants to watch 38 mm of rain
+clear a due watering before trusting the app with their garden takes exactly
+this path, and a suite that reached past it into a settings object would prove
+only that the private route works.
 
-If Workstream E names the setting something other than ``scenario``, this file
-is a one-line change (:data:`SCENARIO_SETTING`) and the skip disappears.
+Each scenario is read on the day its own ``expect`` block names. That matters
+for ``storm``: the balance reports the state of its newest day, and the
+recording runs three days past the downpour, so a round read at the end
+honestly says ``ok`` and the satisfied state is gone.
 """
 
 from __future__ import annotations
 
-import os
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Any
 
 import pytest
 
 from conftest import (  # type: ignore[import-not-found]
+    expectations,
     ics_events,
-    load_fixture,
+    rain_day_of,
+    scenario_day,
     subscribe,
     tasks_by_specimen,
 )
 
-#: The field this suite expects on ``workers.weather.settings.WeatherSettings``,
-#: configured as ``MOH_SCENARIO`` like every other setting in the stack.
-SCENARIO_SETTING = "scenario"
+
+def rounds(client: Any, on: str) -> dict[str, Any]:
+    response = client.get("/api/v1/tending/rounds", params={"on": on})
+    assert response.status_code == 200, response.text
+    return dict(response.json())
 
 
-def _selector_has_landed() -> bool:
-    from workers.weather.settings import WeatherSettings
-
-    return SCENARIO_SETTING in WeatherSettings.model_fields
-
-
-pytestmark = pytest.mark.skipif(
-    not _selector_has_landed(),
-    reason=(
-        f"Workstream E's scenario selector has not landed: "
-        f"`WeatherSettings.{SCENARIO_SETTING}` does not exist, so the running "
-        "app cannot be put under a scenario and only the baseline weather can "
-        "be driven end to end. The seam is "
-        "`workers.weather.world.weather_days(..., scenario=...)`, which already "
-        "takes the argument; E is lifting it to a setting on "
-        "`ws-e/s5-water-balance`. Written against that seam and left skipped "
-        "rather than routed around with a second mechanism."
-    ),
-)
+def balance(client: Any, specimen_id: str) -> dict[str, Any]:
+    response = client.get(f"/api/v1/almanac/water-balance/{specimen_id}")
+    assert response.status_code == 200, response.text
+    return dict(response.json())
 
 
-@contextmanager
-def under_scenario(name: str) -> Iterator[Any]:
-    """Run the whole app on one scenario's weather, then put it back.
+def assert_expectation(client: Any, row: dict[str, Any], on: str, *, name: str) -> None:
+    """One ``expect.assertions`` row, checked on the app rather than the engine."""
+    specimen_id = row["specimen"]
+    expected = row["water_task_status"]
+    note = row.get("note", "")
+    where = f"{name}: {specimen_id} ({note})"
 
-    Both settings objects and both fixture loaders are cached, so the caches
-    are dropped on the way in and on the way out. Leaving one warm would let a
-    scenario leak into the next test, which is the one failure mode a suite
-    about determinism cannot have.
-    """
-    from app import fixtures as app_fixtures
-    from app.main import app
-    from app.settings import get_settings as app_settings
-    from fastapi.testclient import TestClient
-    from tending.fixture_repository import reset_fixture_repository
+    payload = rounds(client, on)
+    due = tasks_by_specimen(payload["due"])
+    satisfied = tasks_by_specimen(payload["satisfied"])
 
-    from workers.weather import world
-    from workers.weather.settings import get_settings as weather_settings
-
-    def clear() -> None:
-        weather_settings.cache_clear()
-        app_settings.cache_clear()
-        world._load.cache_clear()
-        for loader in (
-            app_fixtures.site,
-            app_fixtures.locations,
-            app_fixtures.species,
-            app_fixtures.sources,
-            app_fixtures.specimens,
-            app_fixtures.scenario,
-            app_fixtures.baseline_weather,
-        ):
-            loader.cache_clear()
-        reset_fixture_repository()
-
-    previous = os.environ.get("MOH_SCENARIO")
-    os.environ["MOH_SCENARIO"] = name
-    clear()
-    try:
-        with TestClient(app) as client:
-            yield client
-    finally:
-        if previous is None:
-            os.environ.pop("MOH_SCENARIO", None)
-        else:
-            os.environ["MOH_SCENARIO"] = previous
-        clear()
-
-
-def scenario_day(name: str, index: int) -> str:
-    return str(load_fixture(f"scenarios/{name}.json")["days"][index]["date"])
-
-
-def expectations(name: str) -> list[dict[str, Any]]:
-    """The fixture's own ``expect.assertions``, as the README promises."""
-    return [
-        row
-        for row in load_fixture(f"scenarios/{name}.json")["expect"]["assertions"]
-        if "specimen" in row
-    ]
+    if expected == "satisfied":
+        assert specimen_id in satisfied, where
+        task = satisfied[specimen_id]
+        assert task["status"] == "satisfied", where
+        assert task["satisfied_by"] == row.get("satisfied_by", "rain"), where
+        assert specimen_id not in due, where
+    elif expected == "due":
+        assert specimen_id in due, where
+        assert due[specimen_id]["status"] == "due", where
+        assert due[specimen_id]["satisfied_by"] is None, where
+        assert specimen_id not in satisfied, where
+    elif expected == "ok":
+        # Never owed, so never settled. "ok" is not "satisfied", and keeping
+        # them apart is what makes the satisfied section mean anything.
+        modelled = balance(client, specimen_id)
+        assert modelled["status"] == "ok", where
+        assert modelled["satisfied_by"] is None, where
+        assert modelled["is_due"] is False, where
+        assert specimen_id not in satisfied, where
+        assert specimen_id not in due, where
+    else:  # pragma: no cover — a fixture that says something new
+        raise AssertionError(f"unknown expectation {expected!r}: {row}")
 
 
 # ------------------------------------------------------------------- storm
 
 
-def test_the_storm_fixture_expectations_hold_on_the_running_app() -> None:
-    """Every ``expect`` row in ``storm.json``, asserted against the API."""
-    rows = expectations("storm")
-    assert rows, "a scenario with no expectations tests nothing"
-
-    with under_scenario("storm") as client:
-        on = scenario_day("storm", -1)
-        payload = client.get("/api/v1/tending/rounds", params={"on": on}).json()
-        due = tasks_by_specimen(payload["due"])
-        satisfied = tasks_by_specimen(payload["satisfied"])
-
-        for row in rows:
-            specimen_id = row["specimen"]
-            expected = row["water_task_status"]
-            note = row.get("note", "")
-            balance = client.get(f"/api/v1/almanac/water-balance/{specimen_id}").json()
-
-            if expected == "satisfied":
-                assert specimen_id in satisfied, f"{specimen_id}: {note}"
-                task = satisfied[specimen_id]
-                assert task["status"] == "satisfied"
-                assert task["satisfied_by"] == row.get("satisfied_by", "rain")
-                assert specimen_id not in due
-            elif expected == "due":
-                assert specimen_id in due, f"{specimen_id}: {note}"
-                assert due[specimen_id]["satisfied_by"] is None
-                assert specimen_id not in satisfied
-            elif expected == "ok":
-                # Never owed, so never settled. "ok" is not "satisfied", and
-                # the difference is the whole reason the section exists.
-                assert balance["status"] == "ok", f"{specimen_id}: {note}"
-                assert balance["satisfied_by"] is None
-                assert specimen_id not in satisfied, f"{specimen_id}: {note}"
-            else:  # pragma: no cover - a fixture that says something new
-                raise AssertionError(f"unknown expectation {expected!r}: {row}")
+@pytest.mark.parametrize(
+    "row", expectations("storm"), ids=lambda row: str(row["specimen"])[-3:]
+)
+def test_the_storm_expectations_hold_on_the_running_app(
+    storm: Any, row: dict[str, Any]
+) -> None:
+    assert_expectation(storm, row, rain_day_of("storm"), name="storm")
 
 
-def test_the_storm_cancels_its_settled_waterings_in_the_calendar() -> None:
-    with under_scenario("storm") as client:
-        on = scenario_day("storm", -1)
-        payload = client.get("/api/v1/tending/rounds", params={"on": on}).json()
-        events = ics_events(client.get(subscribe(client)).text)
+def test_the_storm_settles_something_and_leaves_something_owed(storm: Any) -> None:
+    """A scenario where everything cleared, or nothing did, tests one branch."""
+    payload = rounds(storm, rain_day_of("storm"))
+    assert payload["satisfied"], "38 mm of rain settled nothing, so it is not a storm"
+    assert payload["due"], "everything settled, so nothing exercises the other half"
 
-        settled = payload["satisfied"]
-        assert settled, "the storm settled nothing, so it is not a storm"
-        for task in settled:
-            uid = f"task-{task['id']}@herbology"
-            assert uid in events, "a settled watering was dropped, not cancelled"
-            assert events[uid]["STATUS"] == "CANCELLED"
+
+def test_the_storm_cancels_its_settled_waterings_in_the_calendar(storm: Any) -> None:
+    settled = rounds(storm, rain_day_of("storm"))["satisfied"]
+    events = ics_events(storm.get(subscribe(storm)).text)
+    for task in settled:
+        uid = f"task-{task['id']}@herbology"
+        assert uid in events, "a settled watering was dropped, not cancelled"
+        assert events[uid]["STATUS"] == "CANCELLED", events[uid]
 
 
 # ----------------------------------------------------------------- drought
 
 
-def test_the_drought_fixture_expectations_hold_on_the_running_app() -> None:
-    """Every plant the drought fixture names comes due, and stays due."""
-    rows = expectations("drought")
-    assert rows
-
-    with under_scenario("drought") as client:
-        on = scenario_day("drought", -1)
-        payload = client.get("/api/v1/tending/rounds", params={"on": on}).json()
-        due = tasks_by_specimen(payload["due"])
-
-        for row in rows:
-            specimen_id = row["specimen"]
-            assert row["water_task_status"] == "due", row
-            assert specimen_id in due, f"{specimen_id}: {row.get('note', '')}"
-            assert due[specimen_id]["status"] == "due"
-            assert due[specimen_id]["satisfied_by"] is None
-
-
-def test_a_drought_never_reports_a_watering_the_sky_did() -> None:
-    """``satisfied_by_rain_count: 0`` — the fixture's own last assertion."""
-    with under_scenario("drought") as client:
-        on = scenario_day("drought", -1)
-        payload = client.get("/api/v1/tending/rounds", params={"on": on}).json()
-        assert payload["satisfied"] == [], (
-            "no rain fell in three weeks, so nothing may be reported as "
-            f"settled by the weather: {payload['satisfied']}"
-        )
-        for task in payload["due"]:
-            assert task["satisfied_by"] is None
+#: Expectations the running app cannot currently meet, with the diagnosis.
+#:
+#: `api/almanac/service.py` replays `BALANCE_DAYS = 14` days from a zero
+#: deficit. That caps how *slowly* a plant may dry and still be noticed: the
+#: drought-adapted lavender hedge needs 15 days of this weather to cross its
+#: 36 mm threshold (`tests/engines/` confirms the engine reaches it on day 15
+#: over the full recording, and the fixture has promised `by_day: 15` since
+#: S0), so the endpoint stops one day short and reports `ok` however long the
+#: drought runs. Under ADR 0010 this endpoint is the only thing that decides
+#: whether an outdoor plant is watered, so a plant that dries slowly is a plant
+#: the app never asks anybody to water.
+#:
+#: The live path stores the deficit per day and carries it forward, so it does
+#: not reset — but the mock path is what every demo, every screen J builds and
+#: this suite run on. `api/almanac/` is Workstream E's, so this is escalated
+#: rather than worked around. Strict, so it fails the day it starts passing.
+CANNOT_YET_BE_MET = {
+    "01890040-0000-7000-8000-000000000006": (
+        "The Almanac replays only BALANCE_DAYS = 14 days from a zero deficit, "
+        "and the lavender hedge needs 15 to cross its threshold — so this "
+        "fixture promise (by_day 15, held by the engine over the full "
+        "recording) cannot be reached through the API. Raised with Workstream "
+        "A for E. Delete this entry when the window carries a starting deficit."
+    ),
+}
 
 
-def test_a_drought_does_not_grow_more_certain_as_it_goes_on() -> None:
-    """Three weeks of arithmetic about unmeasured soil is still arithmetic."""
-    with under_scenario("drought") as client:
-        on = scenario_day("drought", -1)
-        payload = client.get("/api/v1/tending/rounds", params={"on": on}).json()
-        for task in payload["due"]:
-            assert task["confidence"] != "high", (
-                f"{task['specimen']['display_name']} claims a measured "
-                "certainty for a modelled deficit (ADR 0010)"
+def drought_rows() -> list[Any]:
+    return [
+        (
+            pytest.param(
+                row,
+                id=str(row["specimen"])[-3:],
+                marks=pytest.mark.xfail(
+                    strict=True, reason=CANNOT_YET_BE_MET[row["specimen"]]
+                ),
             )
+            if row["specimen"] in CANNOT_YET_BE_MET
+            else pytest.param(row, id=str(row["specimen"])[-3:])
+        )
+        for row in expectations("drought")
+    ]
+
+
+@pytest.mark.parametrize("row", drought_rows())
+def test_the_drought_expectations_hold_on_the_running_app(
+    drought: Any, row: dict[str, Any]
+) -> None:
+    """Each `by_day` promise, read on the last day of three rainless weeks."""
+    assert row["water_task_status"] == "due", row
+    assert_expectation(drought, row, scenario_day("drought", -1), name="drought")
+
+
+def test_a_drought_never_reports_a_watering_the_sky_did(drought: Any) -> None:
+    """``satisfied_by_rain_count: 0`` — the fixture's own last assertion."""
+    payload = rounds(drought, scenario_day("drought", -1))
+    assert payload["satisfied"] == [], (
+        "no rain fell in three weeks, so nothing may be reported as settled "
+        f"by the weather: {payload['satisfied']}"
+    )
+    for task in payload["due"]:
+        assert task["satisfied_by"] is None
+
+
+def test_a_drought_does_not_grow_more_certain_as_it_goes_on(drought: Any) -> None:
+    """Three weeks of arithmetic about unmeasured soil is still arithmetic."""
+    payload = rounds(drought, scenario_day("drought", -1))
+    for task in payload["due"]:
+        assert task["confidence"] != "high", (
+            f"{task['specimen']['display_name']} claims a measured certainty "
+            "for a modelled deficit (ADR 0010)"
+        )
+
+
+def test_a_drought_leaves_the_deficit_climbing(drought: Any) -> None:
+    """Nothing reduces a deficit but rain that lands or water somebody pours.
+
+    True of every plant the drought names, including the one the 14-day window
+    stops short of calling due: its deficit still only climbs.
+    """
+    for row in expectations("drought"):
+        payload = balance(drought, row["specimen"])
+        deficits = [day["deficit_mm"] for day in payload["days"]]
+        assert deficits == sorted(deficits), (row["specimen"], deficits)
+        assert not [
+            day for day in payload["days"] if day["status"] == "satisfied"
+        ], "no day of a rainless fortnight may be reported as settled"
+
+
+# ------------------------------------------------- the switch is opt-in
+
+
+def test_a_scenario_does_not_outlive_the_request_that_asked_for_it(
+    client: Any,
+) -> None:
+    """The default deployment sees the baseline, whatever a previous test set.
+
+    Workstream E's suite pins this from its own side; it is asserted here too
+    because this file is the one that sets the environment variable, and a
+    leaked scenario would quietly make every other test in `tests/e2e/` a test
+    of the storm.
+    """
+    payload = client.get("/api/v1/tending/rounds").json()
+    assert payload["satisfied"] == [], (
+        "a scenario leaked out of its fixture: the baseline recording settles "
+        "no waterings, which is what makes the selector opt-in"
+    )
