@@ -10,11 +10,13 @@ Run them the way CI does, from the repository root::
 
     .venv/bin/pytest tests api workers -q
 
-A subtree on its own (``pytest api/almanac``) misses the root ``conftest.py``
-that puts both source roots on ``sys.path``, so ``app.main`` cannot import
-``workers``. That is true of every suite under ``api/`` and is deliberately not
-worked around here: a second copy of that path mechanism is how the first one
-broke unnoticed. See the note in the repository-root ``conftest.py``.
+``pytest api/almanac`` on its own works too, as of the root ``pytest.ini``.
+It did not before: ``api/pyproject.toml`` carried the only pytest config, so
+pytest made ``api/`` the rootdir, ``confcutdir`` followed it, and the
+repository-root ``conftest.py`` that puts both source roots on ``sys.path`` was
+never loaded — ``app.main`` could not import ``workers``. There is still only
+one copy of that path mechanism, which is the point; it is now reachable from
+every invocation rather than only some.
 """
 
 import pytest
@@ -34,6 +36,22 @@ CONFIDENCES = {"high", "medium", "low", "unknown"}
 @pytest.fixture(scope="module")
 def client():
     return TestClient(app)
+
+
+@pytest.fixture
+def under_storm(monkeypatch):
+    """The same app, stood inside the storm recording.
+
+    Function-scoped and cache-clearing on both sides: `get_settings` is cached,
+    so a scenario left set would leak into the module-scoped `client` and the
+    baseline tests would quietly start reading July.
+    """
+    from workers.weather.settings import get_settings
+
+    monkeypatch.setenv("MOH_SCENARIO", "storm")
+    get_settings.cache_clear()
+    yield TestClient(app)
+    get_settings.cache_clear()
 
 
 def balance(client, specimen_id):
@@ -169,9 +187,25 @@ def test_an_open_air_plant_does_collect_rain(client):
     assert any(day["precip_mm"] > 0 for day in open_air["days"])
 
 
-def test_rain_that_settles_a_watering_shows_as_satisfied_somewhere(client):
-    """The plan is explicit: the task must not simply vanish."""
-    days = balance(client, LEMON_ON_TERRACE)["days"]
+def test_rain_that_settles_a_watering_shows_as_satisfied_somewhere(under_storm):
+    """The plan is explicit: the task must not simply vanish.
+
+    Asserted under the storm rather than the baseline, for two reasons that
+    both landed in S5.
+
+    The baseline is the *control* recording — thirty days of ordinary weather,
+    so that a deployment which selects nothing sees nothing dramatic. It closes
+    on a 6 mm shower, and 6 mm no longer settles a 45 L pot, because the other
+    change was Workstream E fixing `BALANCE_DAYS`: the endpoint used to replay
+    only the last fortnight from a zero deficit, so the lemon arrived at that
+    shower artificially dry-but-shallow and the shower crossed it back. The
+    deficit is now what the whole recording did, and a light shower on a real
+    deficit is honestly not a settled watering.
+
+    So the property moves to the weather that actually demonstrates it. The
+    storm's downpour is 38 mm.
+    """
+    days = balance(under_storm, LEMON_ON_TERRACE)["days"]
     assert any(day["status"] == "satisfied" for day in days)
 
 
