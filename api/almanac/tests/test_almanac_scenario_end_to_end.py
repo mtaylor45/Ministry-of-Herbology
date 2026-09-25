@@ -26,12 +26,28 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from workers.weather import world
+from workers.weather.settings import WeatherSettings
 from workers.weather.settings import get_settings as weather_settings
 
-#: The day of ``storm`` on which 38 mm of rain falls. The recording runs three
-#: days past it; a balance replayed to the end honestly reports the deficit that
-#: has rebuilt since, which is the right answer to a question nobody asked.
-STORM_RAIN_DAY = "2026-07-07"
+
+def storm_rain_day() -> str:
+    """The day ``storm``'s 38 mm falls, read from the recording, not restated.
+
+    L owns ``fixtures/`` and re-cut ``storm`` so the rain lands on its *last*
+    day — the better fixture, and the reason this is looked up rather than typed:
+    a test that copies a number out of a file it does not own is holding a second
+    copy of somebody else's data, and the copy goes stale silently.
+    """
+    rows = world.weather_rows(WeatherSettings(), scenario="storm")
+    wet = [row for row in rows if row["precip_mm"]]
+    assert len(wet) == 1, "storm is no longer a single-downpour recording"
+    assert wet[0]["date"] == rows[-1]["date"], (
+        "storm no longer ends on its rain day, so the balance's newest day is "
+        "dry again and MOH_SCENARIO_DAY is needed to see the rain land"
+    )
+    return str(wet[0]["date"])
+
 
 LEMON_ON_TERRACE = "01890040-0000-7000-8000-000000000004"  # 45 L, open sky
 LEMON_ON_PORCH = "01890040-0000-7000-8000-000000000005"  # 25 L, under a roof
@@ -47,8 +63,10 @@ def under_storm(monkeypatch: pytest.MonkeyPatch):
     """
     from app.main import app
 
-    monkeypatch.setenv("MOH_WEATHER_SCENARIO", "storm")
-    monkeypatch.setenv("MOH_WEATHER_SCENARIO_DAY", STORM_RAIN_DAY)
+    # No MOH_SCENARIO_DAY: the recording ends on its rain day, so the balance's
+    # newest day *is* the wet one. storm_rain_day() asserts that still holds.
+    monkeypatch.setenv("MOH_SCENARIO", "storm")
+    monkeypatch.delenv("MOH_SCENARIO_DAY", raising=False)
     weather_settings.cache_clear()
     yield TestClient(app)
     weather_settings.cache_clear()
@@ -59,8 +77,8 @@ def unset(monkeypatch: pytest.MonkeyPatch):
     """The shipped default: no scenario, the baseline recording."""
     from app.main import app
 
-    monkeypatch.delenv("MOH_WEATHER_SCENARIO", raising=False)
-    monkeypatch.delenv("MOH_WEATHER_SCENARIO_DAY", raising=False)
+    monkeypatch.delenv("MOH_SCENARIO", raising=False)
+    monkeypatch.delenv("MOH_SCENARIO_DAY", raising=False)
     weather_settings.cache_clear()
     yield TestClient(app)
     weather_settings.cache_clear()
@@ -113,7 +131,7 @@ def test_the_balance_underneath_it_attributes_the_rain(under_storm):
     assert payload["deficit_mm"] == 0.0
 
     rain_day = payload["days"][-1]
-    assert rain_day["day"] == STORM_RAIN_DAY
+    assert rain_day["day"] == storm_rain_day()
     assert rain_day["status"] == "satisfied"
     assert rain_day["precip_mm"] == 38.0
 
@@ -134,17 +152,69 @@ def test_a_plant_under_a_roof_is_not_watered_by_rain_it_never_saw(under_storm):
 
 
 def test_the_almanac_shows_the_same_week_the_balance_ran_on(under_storm):
-    """One deployment, one weather. Two loaders is how those come apart."""
+    """One deployment, one weather. Two loaders is how those come apart.
+
+    The history ends where the balance ends — on the wet day — and the forecast
+    is drawn from the same recording rather than from the baseline. Every date on
+    both screens belongs to ``storm``.
+
+    What is deliberately *not* asserted is that the forecast begins on the day
+    the balance calls today. A recording has no future: with no
+    ``MOH_SCENARIO_DAY`` set the balance's newest day is the recording's last,
+    and a forecast anchored there would hold exactly one day. Mock mode has
+    presented a historical recording read forwards as "the forecast" since S3 —
+    ``days[:10]`` — so on an eleven-day recording like ``storm`` the ten-day
+    forecast stops one day short of the day the balance is standing on. That is
+    the S3 shape rather than this switch's, it is raised with A rather than
+    quietly changed here, and setting the day *does* anchor both together, which
+    the test below shows.
+    """
+    storm_dates = {
+        row["date"] for row in world.weather_rows(WeatherSettings(), scenario="storm")
+    }
+
     forecast = under_storm.get(
         "/api/v1/almanac/forecast", params={"site_id": "x", "horizon": "daily"}
     ).json()
-    assert forecast[0]["time"].startswith(STORM_RAIN_DAY)
-    assert forecast[0]["precip_mm"] == 38.0
+    assert forecast, "a deployment under a scenario still has an Almanac"
+    assert {
+        row["time"][:10] for row in forecast
+    } <= storm_dates, (
+        "the forecast is drawn from the selected recording, not the baseline"
+    )
 
     history = under_storm.get(
         "/api/v1/almanac/history", params={"window": "7d", "metric": "precip_mm"}
     ).json()
-    assert history["values"][-1] == 38.0
+    assert history["values"][-1] == 38.0, "the history ends on the wet day too"
+
+    balance_days = {
+        day["day"] for day in balance(under_storm, LEMON_ON_TERRACE)["days"]
+    }
+    assert balance_days <= storm_dates
+
+
+def test_standing_on_a_day_anchors_the_forecast_to_it(monkeypatch):
+    """``MOH_SCENARIO_DAY`` is where the operator is, so the forecast starts there."""
+    from app.main import app
+
+    rows = world.weather_rows(WeatherSettings(), scenario="storm")
+    mid = rows[len(rows) // 2]["date"]
+
+    monkeypatch.setenv("MOH_SCENARIO", "storm")
+    monkeypatch.setenv("MOH_SCENARIO_DAY", mid)
+    weather_settings.cache_clear()
+    try:
+        client = TestClient(app)
+        forecast = client.get(
+            "/api/v1/almanac/forecast", params={"site_id": "x", "horizon": "daily"}
+        ).json()
+        assert forecast[0]["time"].startswith(mid), "the forecast starts where you are"
+
+        payload = balance(client, LEMON_ON_TERRACE)
+        assert payload["days"][-1]["day"] == mid, "and the history ends there"
+    finally:
+        weather_settings.cache_clear()
 
 
 def test_the_certainty_survives_the_trip_to_the_instruction(under_storm):
@@ -164,11 +234,23 @@ def test_the_certainty_survives_the_trip_to_the_instruction(under_storm):
 
 
 def test_an_unset_scenario_leaves_the_deployment_exactly_as_it_was(unset):
-    """The switch is opt-in. A deployment that sets nothing sees no change."""
+    """The switch is opt-in: a deployment that sets nothing reads the baseline.
+
+    What is asserted is that it is the *baseline* recording, not a scenario —
+    deliberately not the baseline's own numbers. L re-cut its closing day from
+    6 mm to 32 mm, which is L's call over L's file, and a test of E's switch that
+    fails because of it was testing the wrong thing.
+    """
+    from workers.weather import world
+
+    baseline_last = world.weather_rows(WeatherSettings())[-1]["date"]
+    storm_days = {
+        row["date"] for row in world.weather_rows(WeatherSettings(), scenario="storm")
+    }
+
     payload = balance(unset, LEMON_ON_TERRACE)
-    assert payload["days"][-1]["day"] == "2026-05-30", "the baseline recording"
-    assert payload["status"] == "due"
+    assert payload["days"][-1]["day"] == baseline_last
+    assert payload["days"][-1]["day"] not in storm_days
 
     day = rounds(unset)
-    assert day["satisfied"] == []
-    assert len(day["due"]) == 9
+    assert day["due"] or day["satisfied"], "the round still speaks for the garden"

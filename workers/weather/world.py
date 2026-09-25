@@ -117,17 +117,17 @@ def specimen_contexts(
 def active_scenario(settings: WeatherSettings | None = None) -> str | None:
     """The scenario this deployment is standing in, or ``None`` for baseline.
 
-    ``MOH_WEATHER_SCENARIO`` (ADR 0019: an operator input, no usable default).
+    ``MOH_SCENARIO`` (ADR 0019: an operator input, no usable default).
     Unset in every shipped deployment, and unset is the baseline recording.
     """
     settings = settings or get_settings()
-    return settings.weather_scenario
+    return settings.scenario
 
 
 def as_of_day(settings: WeatherSettings | None = None) -> date | None:
     """Which day of the recording counts as today, or ``None`` for its last."""
     settings = settings or get_settings()
-    return settings.weather_scenario_day
+    return settings.scenario_day
 
 
 def weather_rows(
@@ -145,14 +145,14 @@ def weather_rows(
     name = scenario if scenario is not None else active_scenario(settings)
     relative = f"scenarios/{name}.json" if name else "weather/baseline_30d.json"
     if name and not (settings.fixtures_dir / relative).exists():
-        # A typo in MOH_WEATHER_SCENARIO must not read as "fine, no weather".
+        # A typo in MOH_SCENARIO must not read as "fine, no weather".
         # An Almanac with no days looks like a quiet garden, which is the one
         # failure mode ADR 0010 says this package may never produce silently.
         available = sorted(
             path.stem for path in (settings.fixtures_dir / "scenarios").glob("*.json")
         )
         raise ValueError(
-            f"MOH_WEATHER_SCENARIO={name!r} names no recording in "
+            f"MOH_SCENARIO={name!r} names no recording in "
             f"{settings.fixtures_dir / 'scenarios'}; available: "
             f"{', '.join(available) or 'none'}"
         )
@@ -182,7 +182,7 @@ def _check_as_of_is_in_range(
     last = date.fromisoformat(rows[-1]["date"])
     if not first <= day <= last:
         raise ValueError(
-            f"MOH_WEATHER_SCENARIO_DAY={day.isoformat()} is outside {relative}, "
+            f"MOH_SCENARIO_DAY={day.isoformat()} is outside {relative}, "
             f"which runs {first.isoformat()} to {last.isoformat()}. A day outside "
             "the recording selects no weather, and no weather reads as a garden "
             "that needs nothing."
@@ -198,7 +198,7 @@ def weather_days(
 ) -> list[DayWeather]:
     """The site's daily weather, from a scenario or from the baseline.
 
-    Truncated at ``through``, or at ``MOH_WEATHER_SCENARIO_DAY`` when that is
+    Truncated at ``through``, or at ``MOH_SCENARIO_DAY`` when that is
     set: the water balance is a history that ends *now*, and a recording
     replayed three days past its downpour honestly reports the deficit that has
     rebuilt since. Standing on the day the rain fell is what shows the rain.
@@ -234,7 +234,7 @@ def frost_nights(
     two halves describe one week of weather rather than two.
 
     Built from :func:`weather_rows` rather than :func:`weather_days`, and so
-    deliberately **not** cut off at ``MOH_WEATHER_SCENARIO_DAY``. The water
+    deliberately **not** cut off at ``MOH_SCENARIO_DAY``. The water
     balance is a history and ends at today; the frost guard is a 72-hour
     lookahead and is about the nights still ahead of the reader. Truncating it
     at today would leave the guard blind to the freeze it exists to warn about,

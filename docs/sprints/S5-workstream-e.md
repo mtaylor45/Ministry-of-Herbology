@@ -164,3 +164,80 @@ caught, including a uuid-format one). `Task`'s new conditional requirement of
 
 Nothing in the brief was left unfinished. The soil-sensor override remains a
 seam with no hardware behind it (ADR 0010) and is F's after this.
+
+## After the merge: L's suite, and two bugs it found
+
+#29 and #32 merged, and L's #30 landed in parallel. The combination was red, and
+what it exposed was worth more than the two PRs' own test suites.
+
+### The selector was named twice
+
+L wrote `tests/e2e/test_scenario_selector_stories.py` against
+`WeatherSettings.scenario` / `MOH_SCENARIO` and skipped it until the field
+existed, saying plainly that if E chose another name it was a one-line change on
+L's side. E shipped `weather_scenario` / `MOH_WEATHER_SCENARIO`. So five
+end-to-end tests of **the sprint's own exit criterion** sat skipped while both
+halves were merged and green.
+
+**The field is now `scenario`**, and L is right on the merits: `MOH_` already
+scopes the variable and no other field on `WeatherSettings` carries a `weather_`
+prefix. `MOH_WEATHER_SCENARIO` and `MOH_WEATHER_SCENARIO_DAY` keep working as
+aliases, because a merged pull request documented them and an operator may have
+them in a `.env` — they are not the name and are not written down again.
+
+Worth recording as a process point rather than a naming quibble: two workstreams
+each shipped a correct, tested, reviewed half, and the seam between them was
+untested by construction, because L's test for it *skipped itself* rather than
+failing. A skip is invisible in a green run.
+
+### `BALANCE_DAYS` was truncating the deficit, not the screen
+
+`BALANCE_DAYS = 14` is documented as how much the endpoint *shows*. It was also
+what the endpoint *replayed*, which silently restarts the deficit at zero a
+fortnight ago. Nobody noticed because every recording was under 14 days until
+L's drought story ran the selector over a 21-day one:
+
+| | endpoint (14 days) | worker (whole recording) |
+| --- | --- | --- |
+| lavender hedge, in ground, 60 mm profile | 34.02 mm — `ok` | 51.03 mm — `due` |
+
+The fixture says due by day 15 and the weather agrees. A deficit is what the
+weather did, not what the last fortnight of it did, so the replay now covers
+everything available and only the per-day array is trimmed. `deficit_mm`,
+`status` and the confidence all come from the full replay.
+
+This also falsifies something #29's body claimed a bit too broadly. The endpoint
+and the worker were shown to agree on *which recording*; they were never compared
+on *how much of it*, and they disagreed.
+
+### The forecast window, raised rather than changed
+
+Under an eleven-day recording the ten-day forecast (`days[:10]`, since S3) stops
+one day short of the day the balance is standing on. Setting `MOH_SCENARIO_DAY`
+anchors both together; with no day set they disagree about where "now" is. That
+is S3's shape rather than this switch's and is left alone deliberately — flagged
+for A.
+
+## Still open: the irrigation term (L's xfail, escalated to A for E)
+
+`tests/e2e/test_a_dry_spell_keeps_waterings_due.py::test_completing_the_watering_takes_it_off_the_round`
+is xfail, and it is a bad bug: complete a watering and the app immediately asks
+again under a new task id, putting a second VEVENT in every subscribed calendar.
+`run_balance` takes an `irrigation` mapping and the plan's equation has its I(t)
+term; `almanac.service.water_balance` calls it without one.
+
+**Not fixed here, and not for want of trying to keep it small.** Two decisions
+sit in it that are not E's alone:
+
+1. **Where the waterings come from.** The completion log is `api/tending/`'s.
+   E reading it inverts the existing G→E dependency into a cycle. The clean seam
+   is `water_balance(..., irrigation=...)` with G passing what it already knows
+   — one line in `api/tending/environment.py:fixture_environments`, which is G's
+   file and G is not running.
+2. **How millilitres become millimetres.** A completion logs `amount_ml`. Turning
+   500 ml on a 25 L pot into millimetres of relieved deficit is the inverse of
+   `tasks.capacity_mm`, and picking a factor quietly is exactly the kind of
+   invented number rule 6 exists to stop. It wants an ADR line, not a constant
+   chosen by whoever got there first.
+
+Raised for A with both halves named rather than half-built.

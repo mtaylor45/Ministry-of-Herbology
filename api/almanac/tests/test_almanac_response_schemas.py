@@ -37,8 +37,6 @@ SITE = "01890000-0000-7000-8000-000000000001"
 LEMON_ON_TERRACE = "01890040-0000-7000-8000-000000000004"
 MONSTERA_INDOORS = "01890040-0000-7000-8000-000000000001"
 
-STORM_RAIN_DAY = "2026-07-07"
-
 
 @pytest.fixture(scope="module")
 def spec() -> dict[str, Any]:
@@ -91,11 +89,10 @@ def client(request, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     from app.main import app
 
     if request.param == "storm":
-        monkeypatch.setenv("MOH_WEATHER_SCENARIO", "storm")
-        monkeypatch.setenv("MOH_WEATHER_SCENARIO_DAY", STORM_RAIN_DAY)
+        monkeypatch.setenv("MOH_SCENARIO", "storm")
     else:
-        monkeypatch.delenv("MOH_WEATHER_SCENARIO", raising=False)
-        monkeypatch.delenv("MOH_WEATHER_SCENARIO_DAY", raising=False)
+        monkeypatch.delenv("MOH_SCENARIO", raising=False)
+    monkeypatch.delenv("MOH_SCENARIO_DAY", raising=False)
     weather_settings.cache_clear()
     yield TestClient(app)
     weather_settings.cache_clear()
