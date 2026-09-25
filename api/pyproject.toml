@@ -56,6 +56,9 @@ python_version = "3.11"
 strict = true
 ignore_missing_imports = true
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
+# The pytest configuration lives in the repository-root `pytest.ini`, and only
+# there. It used to be here as well, which made `api/` the rootdir for any
+# invocation confined to it — and because pytest's `confcutdir` follows the
+# rootdir, the repository-root `conftest.py` that puts `workers` on `sys.path`
+# was never loaded. `testpaths = ["tests"]` pointed at `api/tests`, which has
+# never existed. See `pytest.ini` for the CI failure this caused.
