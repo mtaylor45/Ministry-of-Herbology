@@ -169,10 +169,68 @@ def test_an_open_air_plant_does_collect_rain(client):
     assert any(day["precip_mm"] > 0 for day in open_air["days"])
 
 
-def test_rain_that_settles_a_watering_shows_as_satisfied_somewhere(client):
-    """The plan is explicit: the task must not simply vanish."""
-    days = balance(client, LEMON_ON_TERRACE)["days"]
-    assert any(day["status"] == "satisfied" for day in days)
+def test_a_shower_too_small_to_settle_a_watering_does_not_claim_to(client):
+    """The baseline's closing 6 mm does not settle a 45 L lemon, and says so.
+
+    This assertion used to be the other way round — *some* day in the window
+    reads ``satisfied`` — and it held only because the endpoint replayed 14 days
+    from a zero deficit. Over the whole recording the pot saturates at its 32.8
+    mm capacity, so 6 mm leaves 29.76 against a 19.65 threshold: still owed. The
+    old pass was an artifact of a deficit counted too low, which is the bug
+    :data:`almanac.service.BALANCE_DAYS` now documents.
+
+    Kept as the inverse rather than deleted, because it guards the direction
+    that matters. A shower credited with more than it did is how a plant goes
+    unwatered — the same family as the double-counted rainfall
+    ``workers/weather/store.py`` replaces whole windows to avoid.
+    """
+    payload = balance(client, LEMON_ON_TERRACE)
+    closing = payload["days"][-1]
+    assert closing["precip_mm"] > 0, "the baseline does end on a wet day"
+    assert closing["deficit_mm"] > payload["threshold_mm"], "6 mm is not enough"
+    assert payload["status"] == "due" and payload["satisfied_by"] is None
+
+
+def test_rain_that_settles_a_watering_shows_as_satisfied_somewhere():
+    """The plan is explicit: the task must not simply vanish.
+
+    Driven under ``storm``, because that is where rain big enough to settle a
+    watering actually falls. The shipped baseline is a dry May with modest
+    showers and no longer contains such a day at all — L moved that story to the
+    scenario in #33, and asserting it against the baseline was what made this
+    test pass on a deficit counted too low.
+
+    Its own client, function-scoped: the module-scoped one above is the
+    no-scenario deployment and must not be quietly wearing a second hat.
+    """
+    import os
+
+    from workers.weather import world
+    from workers.weather.settings import WeatherSettings
+    from workers.weather.settings import get_settings as weather_settings
+
+    rows = world.weather_rows(WeatherSettings(), scenario="storm")
+    wet = [row for row in rows if row["precip_mm"]]
+    assert len(wet) == 1, "storm is no longer a single-downpour recording"
+
+    previous = {
+        key: os.environ.get(key) for key in ("MOH_SCENARIO", "MOH_SCENARIO_DAY")
+    }
+    os.environ["MOH_SCENARIO"] = "storm"
+    os.environ["MOH_SCENARIO_DAY"] = str(wet[0]["date"])
+    weather_settings.cache_clear()
+    try:
+        payload = balance(TestClient(app), LEMON_ON_TERRACE)
+        assert payload["status"] == "satisfied"
+        assert payload["satisfied_by"] == "rain"
+        assert any(day["status"] == "satisfied" for day in payload["days"])
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        weather_settings.cache_clear()
 
 
 def test_an_indoor_specimen_is_told_this_engine_does_not_apply(client):

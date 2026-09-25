@@ -257,3 +257,46 @@ both shapes: 229 passed either way.
 The only property still asserted about the fixture is that it has a *single*
 downpour, because "the rain day" would otherwise be ambiguous — and that assertion
 fails with a sentence rather than as `0.0 == 38.0`.
+
+## After #33 merged: one consequence of the `BALANCE_DAYS` fix, and one blocker
+
+L's #33 merged ahead of both A's #35 and E's #34, so `main` carried the reverted
+fixtures before the replay fix. Merging it back in surfaced one real consequence
+and left one thing E cannot touch.
+
+### A baseline shower stopped claiming to settle a watering
+
+`test_rain_that_settles_a_watering_shows_as_satisfied_somewhere` asserted that
+*some* day of the lemon's window reads `satisfied` against the shipped baseline.
+It passed only because the endpoint replayed 14 days from a zero deficit:
+
+| | 2026-05-29 | 2026-05-30 (6 mm) | any `satisfied` |
+| --- | --- | --- | --- |
+| 14-day replay | 32.75 mm | 29.76 mm | **yes** |
+| full recording | 32.75 mm | 29.76 mm | **no** |
+
+The closing figures are identical; what differed is how the deficit got there.
+Over 14 days it crossed the 19.65 mm threshold *inside* the window, so an earlier
+shower caught it on the way up and read as settling it. Over the whole recording
+the pot is already saturated at its 32.8 mm capacity before the window opens, so
+nothing in it is "a watering that was owed and then was not".
+
+**6 mm does not settle a 45 L lemon in a dry May.** The old pass was an artifact
+of a deficit counted too low, and the assertion is now the inverse — a shower too
+small does not claim credit — which guards the direction that matters, since a
+shower credited with more than it did is how a plant goes unwatered. The positive
+case moved to `storm`, where rain big enough actually falls, with its own
+function-scoped client so the module's no-scenario deployment is not quietly
+wearing a second hat.
+
+### The strict xfail is E's fix and L's line
+
+`tests/e2e/test_scenario_selector_stories.py` carries a strict xfail for the
+drought's lavender promise, saying *"Delete this entry when the window carries a
+starting deficit."* The replay fix satisfies that promise — differently, by
+replaying the whole recording rather than seeding a deficit — so the marker now
+**XPASSes**, and a strict XPASS is a failure.
+
+That line is in L's directory and E may not edit it (rule 2, and the brief says
+so outright). It is the collision E flagged on #34 before #33 merged, arriving
+exactly as described. Everything else on both CI lines is green.
