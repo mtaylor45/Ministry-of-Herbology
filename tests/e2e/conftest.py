@@ -19,6 +19,7 @@ import json
 import re
 import socket
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,7 @@ LEMON_ON_THE_TERRACE = "01890040-0000-7000-8000-000000000004"  # outdoor, open s
 LEMON_ON_THE_PORCH = "01890040-0000-7000-8000-000000000005"  # outdoor, covered
 LAVENDER_HEDGE = "01890040-0000-7000-8000-000000000006"  # outdoor, in ground
 ROSE_IN_THE_BORDER = "01890040-0000-7000-8000-000000000007"  # outdoor, in ground
+HOSTAS_IN_THE_SHADE_BED = "01890040-0000-7000-8000-000000000008"  # outdoor, in ground
 BASIL_ON_THE_TERRACE = "01890040-0000-7000-8000-000000000010"  # outdoor, open sky
 LAVENDER_ON_THE_PORCH = "01890040-0000-7000-8000-000000000011"  # outdoor, covered
 
@@ -71,22 +73,162 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket, "create_connection", refuse)
 
 
-@pytest.fixture
-def client() -> Iterator[Any]:
-    """A mock-mode client whose in-memory schedule starts from the fixtures.
+#: The environment the scenario selector reads (Workstream E, S5). Named once,
+#: because this suite is what needs editing if E renames them — and in S5 they
+#: were renamed once already, which left five tests skipped over a spelling.
+SCENARIO_ENV_VARS = ("MOH_WEATHER_SCENARIO", "MOH_WEATHER_SCENARIO_DAY")
 
-    The store is process-wide so a completion outlives its request; resetting it
-    around every test keeps one scenario's completions out of the next one's
-    rounds.
+#: Fixtures that put the app under a recording. Requesting one of these and
+#: `client` in the same test is a contradiction, and `client` refuses it.
+SCENARIO_FIXTURES = frozenset({"storm", "drought"})
+
+
+def _reset_caches() -> None:
+    """Drop everything that remembers which weather this deployment is under.
+
+    Both settings objects and the fixture loaders are cached. Leaving one warm
+    lets a scenario leak into the next test, which is the one failure mode a
+    suite about determinism cannot have.
+    """
+    from app import fixtures as app_fixtures
+    from app.settings import get_settings as app_settings
+    from tending.fixture_repository import reset_fixture_repository
+
+    from workers.weather import world
+    from workers.weather.settings import get_settings as weather_settings
+
+    weather_settings.cache_clear()
+    app_settings.cache_clear()
+    world._load.cache_clear()
+    for loader in (
+        app_fixtures.site,
+        app_fixtures.locations,
+        app_fixtures.species,
+        app_fixtures.sources,
+        app_fixtures.specimens,
+        app_fixtures.scenario,
+        app_fixtures.baseline_weather,
+    ):
+        loader.cache_clear()
+    reset_fixture_repository()
+
+
+@contextmanager
+def under_scenario(
+    monkeypatch: pytest.MonkeyPatch, name: str, *, on: str | None = None
+) -> Iterator[Any]:
+    """The app as an operator running one of the recorded scenarios has it.
+
+    Set through the environment, because that is the only route a deployment
+    has (ADR 0019) and it is the route Workstream E built in S5:
+    ``MOH_WEATHER_SCENARIO`` picks the recording and
+    ``MOH_WEATHER_SCENARIO_DAY`` says which of its days is "today". A suite
+    that reached past the environment into a settings object would prove only
+    that the private route works.
     """
     from app.main import app
     from fastapi.testclient import TestClient
-    from tending.fixture_repository import reset_fixture_repository
 
-    reset_fixture_repository()
+    scenario_var, day_var = SCENARIO_ENV_VARS
+    monkeypatch.setenv(scenario_var, name)
+    if on is None:
+        monkeypatch.delenv(day_var, raising=False)
+    else:
+        monkeypatch.setenv(day_var, on)
+    _reset_caches()
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        for variable in SCENARIO_ENV_VARS:
+            monkeypatch.delenv(variable, raising=False)
+        _reset_caches()
+
+
+def scenario_day(name: str, index: int) -> str:
+    """The date of one day of a recording, read from the fixture itself."""
+    return str(load_fixture(f"scenarios/{name}.json")["days"][index]["date"])
+
+
+def rain_day_of(name: str) -> str:
+    """The date of a scenario's single soaking, from its own `expect` block."""
+    fixture = load_fixture(f"scenarios/{name}.json")
+    return str(fixture["days"][fixture["expect"]["rain_day_index"]]["date"])
+
+
+def expectations(name: str) -> list[dict[str, Any]]:
+    """A scenario's own per-specimen `expect.assertions`.
+
+    `fixtures/README.md` has always promised that `tests/` asserts each one.
+    Until Workstream E's selector landed in S5 nothing could: the running app
+    only ever saw the baseline, so the expectations could be checked against
+    the engine's arithmetic but never against a screen.
+    """
+    return [
+        row
+        for row in load_fixture(f"scenarios/{name}.json")["expect"]["assertions"]
+        if "specimen" in row
+    ]
+
+
+@pytest.fixture
+def storm(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """The storm, read on the day it rained."""
+    with under_scenario(monkeypatch, "storm", on=rain_day_of("storm")) as client:
+        yield client
+
+
+@pytest.fixture
+def drought(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """The drought, read on its last day — three weeks without rain."""
+    with under_scenario(monkeypatch, "drought") as client:
+        yield client
+
+
+@pytest.fixture
+def client(request: Any, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """The control case: no scenario, the baseline recording, a clean schedule.
+
+    Two things this has to guarantee, and the second is the one that bites.
+
+    The in-memory store is process-wide so a completion outlives its request;
+    resetting it around every test keeps one test's completions out of the next
+    one's rounds.
+
+    And **no scenario may be in force.** This fixture and the scenario fixtures
+    above both decide what weather the app is under, so a test that asked for
+    both would get one deployment wearing two hats — whichever set the
+    environment last, with the other's cache-clear possibly in between. Rather
+    than leave that to fixture ordering, this one unsets the variables itself,
+    drops the same caches, and then *asserts* the app really is on the baseline.
+    A scenario leaking in here would silently turn every test that uses this
+    fixture into a test of the storm.
+    """
+    from app.main import app
+    from fastapi.testclient import TestClient
+
+    from workers.weather import world
+
+    # Checked on the *request*, not on the environment. Asserting
+    # `active_scenario() is None` here would always pass and prove nothing:
+    # this fixture clears the variables itself, so by the time it could look
+    # they are gone — and the damage is done in the other order, where a
+    # scenario fixture sets them again after this client was built.
+    both = SCENARIO_FIXTURES & set(request.fixturenames)
+    assert not both, (
+        f"this test requests `client` and {sorted(both)}, which are two answers "
+        "to the question 'what weather is this deployment under'. Whichever set "
+        "the environment last wins and the other's cache-clear may land in "
+        "between, so the test would pass or fail on fixture ordering. Use one."
+    )
+
+    for name in SCENARIO_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    _reset_caches()
+    assert world.active_scenario() is None, "the baseline is the control case"
     with TestClient(app) as test_client:
         yield test_client
-    reset_fixture_repository()
+    _reset_caches()
 
 
 # --------------------------------------------------------------- the fixtures
