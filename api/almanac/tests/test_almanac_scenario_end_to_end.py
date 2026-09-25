@@ -34,17 +34,23 @@ from workers.weather.settings import get_settings as weather_settings
 def storm_rain_day() -> str:
     """The day ``storm``'s 38 mm falls, read from the recording, not restated.
 
-    L owns ``fixtures/`` and re-cut ``storm`` so the rain lands on its *last*
-    day — the better fixture, and the reason this is looked up rather than typed:
-    a test that copies a number out of a file it does not own is holding a second
-    copy of somebody else's data, and the copy goes stale silently.
+    ``fixtures/`` is L's and ``storm`` has been re-cut twice inside this sprint —
+    the rain on the closing day in one shape, mid-series with trailing days in
+    another. Both are defensible and neither is E's call. So the day is *found*,
+    the way the engine finds it, and the test below stands on it explicitly via
+    ``MOH_SCENARIO_DAY`` rather than relying on where it happens to sit. A test
+    that copies a number out of a file it does not own holds a stale second copy
+    of somebody else's data.
+
+    The one property this does assert is the one the storm story needs: a single
+    downpour. A recording with two would make "the rain day" ambiguous, and the
+    failure should say so in a sentence rather than as ``0.0 == 38.0``.
     """
     rows = world.weather_rows(WeatherSettings(), scenario="storm")
     wet = [row for row in rows if row["precip_mm"]]
-    assert len(wet) == 1, "storm is no longer a single-downpour recording"
-    assert wet[0]["date"] == rows[-1]["date"], (
-        "storm no longer ends on its rain day, so the balance's newest day is "
-        "dry again and MOH_SCENARIO_DAY is needed to see the rain land"
+    assert len(wet) == 1, (
+        f"storm is no longer a single-downpour recording ({len(wet)} wet days), "
+        "so which day the storm story stands on is no longer obvious"
     )
     return str(wet[0]["date"])
 
@@ -63,10 +69,12 @@ def under_storm(monkeypatch: pytest.MonkeyPatch):
     """
     from app.main import app
 
-    # No MOH_SCENARIO_DAY: the recording ends on its rain day, so the balance's
-    # newest day *is* the wet one. storm_rain_day() asserts that still holds.
+    # Standing *on* the rain day, stated rather than assumed. When the recording
+    # ends there this is a no-op; when it carries trailing dry days it is the
+    # whole point — a balance replayed past the rain honestly reports the deficit
+    # that has rebuilt since, which is the right answer to a different question.
     monkeypatch.setenv("MOH_SCENARIO", "storm")
-    monkeypatch.delenv("MOH_SCENARIO_DAY", raising=False)
+    monkeypatch.setenv("MOH_SCENARIO_DAY", storm_rain_day())
     weather_settings.cache_clear()
     yield TestClient(app)
     weather_settings.cache_clear()

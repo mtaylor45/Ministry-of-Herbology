@@ -52,6 +52,19 @@ def storm(settings: WeatherSettings) -> WeatherSettings:
     return settings.model_copy(update={"scenario": "storm"})
 
 
+@pytest.fixture
+def storm_on_the_rain_day(settings: WeatherSettings) -> WeatherSettings:
+    """``storm``, standing on the day it rains — stated, not assumed.
+
+    ``storm`` has been re-cut twice inside this sprint: the downpour on the
+    closing day in one shape, mid-series with trailing dry days in another. Both
+    are L's call over L's file, so nothing here depends on which it is. Setting
+    the day is a no-op in the first shape and the whole point in the second.
+    """
+    base = settings.model_copy(update={"scenario": "storm"})
+    return base.model_copy(update={"scenario_day": rain_day(base, "storm")})
+
+
 # ------------------------------------------------------------------ the switch
 
 
@@ -70,19 +83,19 @@ def test_selecting_a_scenario_changes_what_the_weather_is(storm):
     days = world.weather_days(storm)
     assert days[0].day == date(2026, 7, 1)
     assert [day.precip_mm for day in days if day.precip_mm] == [38.0]
-    assert days[-1].day == rain_day(storm, "storm")
+    assert rain_day(storm, "storm") in {day.day for day in days}
 
 
-def test_the_as_of_day_ends_the_series_there(storm):
+def test_the_as_of_day_ends_the_series_there(storm, storm_on_the_rain_day):
     """The balance is a history that ends *now*, so "now" has to be sayable.
 
-    ``storm`` now ends *on* its rain day, so the storm demo needs no day at all —
-    L re-cut it for exactly that reason and the fixture's own description says
-    so. What the setting is still for is standing somewhere in the middle of a
-    recording, which is what ``drought`` and ``frost`` are both about.
+    This is what the setting is *for*: a recording whose interesting day is not
+    its last one. ``drought`` and ``frost`` are both about a day in the middle,
+    and ``storm`` has been cut both ways inside one sprint.
     """
     wet = rain_day(storm, "storm")
-    assert world.weather_days(storm)[-1].day == wet, "the recording ends on the rain"
+    assert world.weather_days(storm_on_the_rain_day)[-1].day == wet
+    assert world.weather_days(storm_on_the_rain_day)[-1].precip_mm == 38.0
 
     stopped_early = storm.model_copy(update={"scenario_day": wet - timedelta(days=2)})
     days = world.weather_days(stopped_early)
@@ -136,7 +149,7 @@ def test_a_scenario_name_may_not_be_a_path():
 # -------------------------------------------------- the API and the worker agree
 
 
-def test_the_endpoint_and_the_job_read_the_same_setting(storm, run):
+def test_the_endpoint_and_the_job_read_the_same_setting(storm_on_the_rain_day, run):
     """The one property worth a test all of its own.
 
     If the Almanac resolved the scenario and the worker did not, a deployment
@@ -148,7 +161,7 @@ def test_the_endpoint_and_the_job_read_the_same_setting(storm, run):
 
     from workers.weather import tasks
 
-    settings = storm  # the recording ends on its rain day; no day needed
+    settings = storm_on_the_rain_day
     lemon = "01890040-0000-7000-8000-000000000004"  # 45 L, open sky
 
     report = run(tasks.evaluate_water_balance({"settings": settings}))

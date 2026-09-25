@@ -241,3 +241,19 @@ sit in it that are not E's alone:
    chosen by whoever got there first.
 
 Raised for A with both halves named rather than half-built.
+
+## A note on fixture-shaped tests, after the second re-cut
+
+`storm` was re-cut twice inside this sprint — the downpour on the closing day in
+one shape, mid-series with trailing dry days in another. Both are defensible and
+both are L's call over L's file.
+
+E's tests now depend on **neither**. The rain day is found in the recording, and
+the storm story stands on it by setting `MOH_SCENARIO_DAY` explicitly rather than
+relying on where it happens to sit; setting it is a no-op when the recording ends
+there and the whole point when it does not. Verified by running E's suites against
+both shapes: 229 passed either way.
+
+The only property still asserted about the fixture is that it has a *single*
+downpour, because "the rain day" would otherwise be ambiguous — and that assertion
+fails with a sentence rather than as `0.0 == 38.0`.
