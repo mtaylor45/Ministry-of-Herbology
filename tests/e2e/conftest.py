@@ -19,6 +19,7 @@ import json
 import re
 import socket
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,7 @@ LEMON_ON_THE_TERRACE = "01890040-0000-7000-8000-000000000004"  # outdoor, open s
 LEMON_ON_THE_PORCH = "01890040-0000-7000-8000-000000000005"  # outdoor, covered
 LAVENDER_HEDGE = "01890040-0000-7000-8000-000000000006"  # outdoor, in ground
 ROSE_IN_THE_BORDER = "01890040-0000-7000-8000-000000000007"  # outdoor, in ground
+HOSTAS_IN_THE_SHADE_BED = "01890040-0000-7000-8000-000000000008"  # outdoor, in ground
 BASIL_ON_THE_TERRACE = "01890040-0000-7000-8000-000000000010"  # outdoor, open sky
 LAVENDER_ON_THE_PORCH = "01890040-0000-7000-8000-000000000011"  # outdoor, covered
 
@@ -69,6 +71,107 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(socket.socket, "connect", refuse)
     monkeypatch.setattr(socket, "create_connection", refuse)
+
+
+def _reset_caches() -> None:
+    """Drop everything that remembers which weather this deployment is under.
+
+    Both settings objects and the fixture loaders are cached. Leaving one warm
+    lets a scenario leak into the next test, which is the one failure mode a
+    suite about determinism cannot have.
+    """
+    from app import fixtures as app_fixtures
+    from app.settings import get_settings as app_settings
+    from tending.fixture_repository import reset_fixture_repository
+
+    from workers.weather import world
+    from workers.weather.settings import get_settings as weather_settings
+
+    weather_settings.cache_clear()
+    app_settings.cache_clear()
+    world._load.cache_clear()
+    for loader in (
+        app_fixtures.site,
+        app_fixtures.locations,
+        app_fixtures.species,
+        app_fixtures.sources,
+        app_fixtures.specimens,
+        app_fixtures.scenario,
+        app_fixtures.baseline_weather,
+    ):
+        loader.cache_clear()
+    reset_fixture_repository()
+
+
+@contextmanager
+def under_scenario(
+    monkeypatch: pytest.MonkeyPatch, name: str, *, on: str | None = None
+) -> Iterator[Any]:
+    """The app as an operator running one of the recorded scenarios has it.
+
+    Set through the environment, because that is the only route a deployment
+    has (ADR 0019) and it is the route Workstream E built in S5:
+    ``MOH_WEATHER_SCENARIO`` picks the recording and
+    ``MOH_WEATHER_SCENARIO_DAY`` says which of its days is "today". A suite
+    that reached past the environment into a settings object would prove only
+    that the private route works.
+    """
+    from app.main import app
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("MOH_WEATHER_SCENARIO", name)
+    if on is None:
+        monkeypatch.delenv("MOH_WEATHER_SCENARIO_DAY", raising=False)
+    else:
+        monkeypatch.setenv("MOH_WEATHER_SCENARIO_DAY", on)
+    _reset_caches()
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        monkeypatch.delenv("MOH_WEATHER_SCENARIO", raising=False)
+        monkeypatch.delenv("MOH_WEATHER_SCENARIO_DAY", raising=False)
+        _reset_caches()
+
+
+def scenario_day(name: str, index: int) -> str:
+    """The date of one day of a recording, read from the fixture itself."""
+    return str(load_fixture(f"scenarios/{name}.json")["days"][index]["date"])
+
+
+def rain_day_of(name: str) -> str:
+    """The date of a scenario's single soaking, from its own `expect` block."""
+    fixture = load_fixture(f"scenarios/{name}.json")
+    return str(fixture["days"][fixture["expect"]["rain_day_index"]]["date"])
+
+
+def expectations(name: str) -> list[dict[str, Any]]:
+    """A scenario's own per-specimen `expect.assertions`.
+
+    `fixtures/README.md` has always promised that `tests/` asserts each one.
+    Until Workstream E's selector landed in S5 nothing could: the running app
+    only ever saw the baseline, so the expectations could be checked against
+    the engine's arithmetic but never against a screen.
+    """
+    return [
+        row
+        for row in load_fixture(f"scenarios/{name}.json")["expect"]["assertions"]
+        if "specimen" in row
+    ]
+
+
+@pytest.fixture
+def storm(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """The storm, read on the day it rained."""
+    with under_scenario(monkeypatch, "storm", on=rain_day_of("storm")) as client:
+        yield client
+
+
+@pytest.fixture
+def drought(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """The drought, read on its last day — three weeks without rain."""
+    with under_scenario(monkeypatch, "drought") as client:
+        yield client
 
 
 @pytest.fixture

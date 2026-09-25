@@ -16,6 +16,7 @@ catch it.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from conftest import (  # type: ignore[import-not-found]
@@ -23,6 +24,7 @@ from conftest import (  # type: ignore[import-not-found]
     MANDRAKE_IN_THE_GREENHOUSE,
     confidence_rank,
     ics_events,
+    rain_day_of,
     subscribe,
     tasks_by_specimen,
 )
@@ -33,8 +35,8 @@ from conftest import (  # type: ignore[import-not-found]
 UNCITED_INTERVAL = MANDRAKE_IN_THE_GREENHOUSE
 
 
-def rounds(client: Any, on: str) -> dict[str, Any]:
-    response = client.get("/api/v1/tending/rounds", params={"on": on})
+def rounds(client: Any, on: str | None = None) -> dict[str, Any]:
+    response = client.get("/api/v1/tending/rounds", params={"on": on} if on else {})
     assert response.status_code == 200, response.text
     return dict(response.json())
 
@@ -109,21 +111,24 @@ def test_an_uncited_interval_is_marked_unknown_where_a_reader_will_see_it(
 
 
 def test_stale_weather_makes_the_answer_less_certain_and_says_so(
-    client: Any, weather_last_day: str, a_day_the_weather_does_not_cover: str
+    storm: Any,
 ) -> None:
-    """The same plant, the same fixture, a balance that no longer reaches today.
+    """The same plant, the same recording, a balance that no longer reaches today.
 
     Nothing has advanced the deficit since the weather ran out, so the plant is
     drier than the number says. The app has to lose confidence over that and
     name the reason; an answer that stayed at ``medium`` would be claiming a
     currency it has not got.
     """
-    current = tasks_by_specimen(rounds(client, weather_last_day)["satisfied"])[
+    fresh_day = rain_day_of("storm")
+    stale_day = (date.fromisoformat(fresh_day) + timedelta(days=49)).isoformat()
+
+    current = tasks_by_specimen(rounds(storm, fresh_day)["satisfied"])[
         LEMON_ON_THE_TERRACE
     ]
-    stale = tasks_by_specimen(
-        rounds(client, a_day_the_weather_does_not_cover)["satisfied"]
-    )[LEMON_ON_THE_TERRACE]
+    stale = tasks_by_specimen(rounds(storm, stale_day)["satisfied"])[
+        LEMON_ON_THE_TERRACE
+    ]
 
     assert current["degraded"] is False and current["degradations"] == []
     assert current["confidence"] == "medium", (
@@ -136,8 +141,8 @@ def test_stale_weather_makes_the_answer_less_certain_and_says_so(
         current["confidence"]
     ), (
         f"the same balance read {stale['confidence']!r} against weather that "
-        f"stops months short and {current['confidence']!r} against weather "
-        "that reaches the day — staleness has to cost something"
+        f"stops seven weeks short and {current['confidence']!r} against "
+        "weather that reaches the day — staleness has to cost something"
     )
     codes = {row["code"] for row in stale["degradations"]}
     assert "balance_not_current" in codes, codes

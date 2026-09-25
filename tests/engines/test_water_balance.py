@@ -124,12 +124,31 @@ def test_drought_meets_its_stated_deadline(repo_root, world, specimen_id):
 def test_the_storm_fixture_agrees_with_itself(repo_root):
     """`expect.rain_day_index` is prose about the weather; check it against it."""
     scenario = _fixture(repo_root, "scenarios/storm.json")
-    assert scenario["expect"]["rain_day_index"] == rain_day(scenario)
-    assert rain_day(scenario) == len(scenario["days"]) - 1, (
-        "the storm must end on the wet day: the balance reports the state of "
-        "its newest day, so a scenario that ran on past the rain would report "
-        "'ok' and the satisfied state would never reach a screen"
-    )
+    wet = rain_day(scenario)
+    assert scenario["expect"]["rain_day_index"] == wet
+    assert all(
+        assertion["on_day"] == wet
+        for assertion in scenario["expect"]["assertions"]
+        if "on_day" in assertion
+    ), "every per-specimen expectation is about the day it rained"
+
+
+def test_the_storm_runs_on_past_its_downpour(repo_root):
+    """And says so, because reading it on the wrong day gives the wrong answer.
+
+    The balance reports the state of its *newest* day. Replayed to the end of
+    this recording the deficit has begun to rebuild and the series honestly
+    says `ok`, so the satisfied state the scenario exists to show is gone.
+    Standing on the day it rained is Workstream E's `MOH_WEATHER_SCENARIO_DAY`
+    (S5), and the fixture's `expect` block names it rather than leaving the
+    reader to discover it.
+
+    Trimming the trailing days would hide that instead of explaining it — and
+    would delete the one case E's day-setting was built for.
+    """
+    scenario = _fixture(repo_root, "scenarios/storm.json")
+    assert rain_day(scenario) < len(scenario["days"]) - 1
+    assert "MOH_WEATHER_SCENARIO_DAY" in scenario["expect"]["read_on_the_rain_day"]
 
 
 def test_storm_rain_relieves_open_air_plants(repo_root, world):

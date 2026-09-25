@@ -1,36 +1,49 @@
 """S5's exit criterion, end to end: rain visibly clears a due watering.
 
-Owner: Workstream L. Every fact here arrives over HTTP from the running app on
-the shipped fixtures — the Almanac's water balance, Morning Rounds, and the ICS
-feed a subscriber actually fetches. Nothing calls an engine.
+Owner: Workstream L. Every fact here arrives over HTTP from the running app
+under ``MOH_WEATHER_SCENARIO=storm``, standing on the day it rained — the
+Almanac's water balance, Morning Rounds, and the ICS feed a subscriber actually
+fetches. Nothing calls an engine: that arithmetic has unit tests in
+``tests/engines/`` and in Workstream E's own suite, and a suite that called
+``run_balance`` directly could be green while every screen was wrong.
+
+The scenario is the right place for this, and the baseline was not. An earlier
+version of this file made the baseline recording end on a downpour so that the
+default deployment would show a settled watering. E's selector does that job
+properly, and ``api/almanac/tests/`` pins the baseline as the "a deployment that
+sets nothing sees no change" case — which is the better principle. The baseline
+is thirty days of ordinary weather again.
 
 The distinction the whole sprint turns on, and the one these assertions exist
 to protect: **a watering the sky settled must stay on the screen, marked, and
-attributed.** A task that disappears because it rained is indistinguishable
-from a task that was never scheduled, and a person who cannot tell those apart
-cannot trust the round. So it is not enough that the plant is absent from
-``due``; it has to be *present* in ``satisfied``, still carrying its plant, its
-title and its amount, and saying ``rain``.
+attributed.** A task that disappears because it rained is indistinguishable from
+a task that was never scheduled, and a person who cannot tell those apart cannot
+trust the round. So it is not enough that the plant is absent from ``due``; it
+has to be *present* in ``satisfied``, still carrying its plant, its title and
+its amount, and saying ``rain``.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from conftest import (  # type: ignore[import-not-found]
     BASIL_ON_THE_TERRACE,
+    HOSTAS_IN_THE_SHADE_BED,
     LAVENDER_HEDGE,
     LAVENDER_ON_THE_PORCH,
     LEMON_ON_THE_PORCH,
     LEMON_ON_THE_TERRACE,
     MONSTERA_IN_THE_STUDY,
+    ROSE_IN_THE_BORDER,
     ics_events,
+    rain_day_of,
     subscribe,
     tasks_by_specimen,
 )
 
-#: The plants the closing rain reaches: outdoor, under open sky.
+#: Outdoor, under open sky, and over threshold when the rain arrived.
 SETTLED_BY_THE_RAIN = (LEMON_ON_THE_TERRACE, BASIL_ON_THE_TERRACE)
 
 #: Outdoor, but under a roof. ``f_cover = 0``: the rain never reaches them, so
@@ -39,9 +52,14 @@ SETTLED_BY_THE_RAIN = (LEMON_ON_THE_TERRACE, BASIL_ON_THE_TERRACE)
 #: these.
 STILL_OWED_UNDER_COVER = (LEMON_ON_THE_PORCH, LAVENDER_ON_THE_PORCH)
 
+#: Outdoor, under open sky, and **never due**: deep soil profiles, or a
+#: drought-adapted species, that six days of this heat does not exhaust. The
+#: rain settled nothing they owed, so they are ``ok`` and not ``satisfied``.
+NEVER_THIRSTY = (ROSE_IN_THE_BORDER, LAVENDER_HEDGE, HOSTAS_IN_THE_SHADE_BED)
 
-def rounds(client: Any, on: str) -> dict[str, Any]:
-    response = client.get("/api/v1/tending/rounds", params={"on": on})
+
+def rounds(client: Any, on: str | None = None) -> dict[str, Any]:
+    response = client.get("/api/v1/tending/rounds", params={"on": on} if on else {})
     assert response.status_code == 200, response.text
     return dict(response.json())
 
@@ -56,11 +74,11 @@ def balance(client: Any, specimen_id: str) -> dict[str, Any]:
 
 
 def test_the_almanac_reports_the_rain_as_having_settled_the_deficit(
-    client: Any, contract: Any, weather_last_day: str
+    storm: Any, contract: Any
 ) -> None:
     """The water balance is where the claim starts. It must make it plainly."""
     for specimen_id in SETTLED_BY_THE_RAIN:
-        payload = balance(client, specimen_id)
+        payload = balance(storm, specimen_id)
         contract(payload, "WaterBalance")
 
         assert payload["applies"] is True, specimen_id
@@ -73,17 +91,17 @@ def test_the_almanac_reports_the_rain_as_having_settled_the_deficit(
         assert payload["deficit_mm"] < payload["threshold_mm"], specimen_id
 
         newest = payload["days"][-1]
-        assert newest["day"] == weather_last_day
-        assert newest["precip_mm"] > 0, "the closing day is the one it rained on"
+        assert newest["day"] == rain_day_of("storm")
+        assert newest["precip_mm"] > 0, "we are standing on the day it rained"
         assert newest["status"] == "satisfied"
 
 
 def test_the_almanac_does_not_credit_rain_to_a_plant_it_never_reached(
-    client: Any, contract: Any
+    storm: Any, contract: Any
 ) -> None:
     """``f_cover = 0`` is the whole point of the covered flag."""
     for specimen_id in STILL_OWED_UNDER_COVER:
-        payload = balance(client, specimen_id)
+        payload = balance(storm, specimen_id)
         contract(payload, "WaterBalance")
 
         assert payload["cover_factor"] == 0.0, specimen_id
@@ -103,7 +121,7 @@ def test_the_almanac_does_not_credit_rain_to_a_plant_it_never_reached(
 
 
 def test_the_settled_watering_is_on_the_round_and_not_merely_absent(
-    client: Any, contract: Any, weather_last_day: str
+    storm: Any, contract: Any
 ) -> None:
     """The assertion the sprint exists for.
 
@@ -111,7 +129,7 @@ def test_the_settled_watering_is_on_the_round_and_not_merely_absent(
     ``due``. That suite would stay green if somebody deleted the satisfied
     section entirely. So: present, marked, attributed, and still a whole task.
     """
-    payload = rounds(client, weather_last_day)
+    payload = rounds(storm)
     contract(payload, "MorningRounds")
 
     satisfied = tasks_by_specimen(payload["satisfied"])
@@ -146,15 +164,13 @@ def test_the_settled_watering_is_on_the_round_and_not_merely_absent(
         )
 
 
-def test_every_settled_watering_names_what_settled_it(
-    client: Any, weather_last_day: str
-) -> None:
+def test_every_settled_watering_names_what_settled_it(storm: Any) -> None:
     """No unattributed entry may sit in the satisfied section at all."""
-    payload = rounds(client, weather_last_day)
+    payload = rounds(storm)
     assert payload["satisfied"], (
-        "no watering was settled by the weather in the shipped fixtures, so "
-        "the 'settled without you' section cannot be demonstrated — this is "
-        "the gap Workstream J raised at the end of S4"
+        "38 mm of rain settled nothing the round shows, so the 'settled "
+        "without you' section cannot be demonstrated — this is the gap "
+        "Workstream J raised at the end of S4"
     )
     unattributed = [
         task["specimen"]["display_name"]
@@ -164,10 +180,8 @@ def test_every_settled_watering_names_what_settled_it(
     assert not unattributed, unattributed
 
 
-def test_a_plant_under_cover_is_still_asked_for_water(
-    client: Any, weather_last_day: str
-) -> None:
-    payload = rounds(client, weather_last_day)
+def test_a_plant_under_cover_is_still_asked_for_water(storm: Any) -> None:
+    payload = rounds(storm)
     due = tasks_by_specimen(payload["due"])
     satisfied = tasks_by_specimen(payload["satisfied"])
 
@@ -181,49 +195,55 @@ def test_a_plant_under_cover_is_still_asked_for_water(
         assert due[specimen_id]["satisfied_by"] is None
 
 
-def test_an_indoor_plant_is_untouched_by_the_weather(
-    client: Any, contract: Any, weather_last_day: str
-) -> None:
+def test_an_indoor_plant_is_untouched_by_the_weather(storm: Any, contract: Any) -> None:
     """Indoor plants run on interval rules; no rain falls in a study."""
-    payload = balance(client, MONSTERA_IN_THE_STUDY)
+    payload = balance(storm, MONSTERA_IN_THE_STUDY)
     contract(payload, "WaterBalance")
     assert payload["applies"] is False
     assert payload["note"], "an inapplicable balance must say why it is shown"
 
-    due = tasks_by_specimen(rounds(client, weather_last_day)["due"])
+    due = tasks_by_specimen(rounds(storm)["due"])
     assert MONSTERA_IN_THE_STUDY in due
     assert due[MONSTERA_IN_THE_STUDY]["satisfied_by"] is None
 
 
 def test_a_plant_that_was_never_thirsty_is_not_reported_as_settled(
-    client: Any, contract: Any, weather_last_day: str
+    storm: Any, contract: Any
 ) -> None:
-    """ "Satisfied" means the sky did a job you owed. This one was never owed.
+    """ "Satisfied" means the sky did a job you owed. These were never owed.
 
-    The drought-adapted lavender hedge does not cross its threshold on the
-    baseline weather, so the closing rain settled nothing for it. Reporting it
-    as satisfied would claim credit for work nobody needed — and would destroy
-    the very distinction the satisfied section exists to draw.
+    A deep soil profile, and a drought-adapted species, that six days of this
+    heat does not exhaust. Reporting them as satisfied would claim credit for
+    work nobody needed — and would destroy the distinction the satisfied
+    section exists to draw, because it would no longer separate a task the
+    weather cleared from a task that never existed.
+
+    This is also the assertion that was wrong in the fixture from S0 to S5:
+    ``storm.json`` claimed the in-ground rose was satisfied by rain, which the
+    engine's own arithmetic has always refused.
     """
-    payload = balance(client, LAVENDER_HEDGE)
-    contract(payload, "WaterBalance")
-    assert payload["applies"] is True
-    assert payload["is_due"] is False
-    assert payload["status"] == "ok", (
-        "'ok' is not 'satisfied' — got " f"{payload['status']!r}"
-    )
-    assert payload["satisfied_by"] is None
+    round_today = rounds(storm)
+    satisfied = tasks_by_specimen(round_today["satisfied"])
+    due = tasks_by_specimen(round_today["due"])
 
-    round_today = rounds(client, weather_last_day)
-    assert LAVENDER_HEDGE not in tasks_by_specimen(round_today["satisfied"])
-    assert LAVENDER_HEDGE not in tasks_by_specimen(round_today["due"])
+    for specimen_id in NEVER_THIRSTY:
+        payload = balance(storm, specimen_id)
+        contract(payload, "WaterBalance")
+        assert payload["applies"] is True, specimen_id
+        assert payload["is_due"] is False, specimen_id
+        assert (
+            payload["status"] == "ok"
+        ), f"{specimen_id}: 'ok' is not 'satisfied' — got {payload['status']!r}"
+        assert payload["satisfied_by"] is None, specimen_id
+        assert specimen_id not in satisfied, specimen_id
+        assert specimen_id not in due, specimen_id
 
 
 # ------------------------------------------------------------ the calendar
 
 
 def test_the_calendar_cancels_the_settled_watering_by_the_uid_it_already_had(
-    client: Any, weather_last_day: str
+    storm: Any,
 ) -> None:
     """A subscribed feed has no way to say "this one is gone" but to say so.
 
@@ -231,13 +251,13 @@ def test_the_calendar_cancels_the_settled_watering_by_the_uid_it_already_had(
     satisfied watering must appear in the feed, once, under the UID it was
     published with, as ``STATUS:CANCELLED``.
     """
-    path = subscribe(client)
-    response = client.get(path)
+    path = subscribe(storm)
+    response = storm.get(path)
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("text/calendar")
     events = ics_events(response.text)
 
-    payload = rounds(client, weather_last_day)
+    payload = rounds(storm)
     satisfied = tasks_by_specimen(payload["satisfied"])
     due = tasks_by_specimen(payload["due"])
 
@@ -261,7 +281,7 @@ def test_the_calendar_cancels_the_settled_watering_by_the_uid_it_already_had(
 
 
 def test_the_settled_watering_keeps_the_identity_it_had_while_it_was_due(
-    client: Any, weather_last_day: str, a_day_the_weather_does_not_cover: str
+    storm: Any,
 ) -> None:
     """The UID is the occurrence's, never the date's and never the status's.
 
@@ -275,10 +295,10 @@ def test_the_settled_watering_keeps_the_identity_it_had_while_it_was_due(
     from tending.domain import EPOCH, OUTSTANDING_INDEX, Rule, ics_uid, task_id
 
     specimens = {
-        row["id"]: row for row in client.get("/api/v1/specimens").json()["items"]
+        row["id"]: row for row in storm.get("/api/v1/specimens").json()["items"]
     }
+    satisfied = tasks_by_specimen(rounds(storm)["satisfied"])
 
-    satisfied = tasks_by_specimen(rounds(client, weather_last_day)["satisfied"])
     for specimen_id in SETTLED_BY_THE_RAIN:
         acquired = specimens[specimen_id]["acquired_on"]
         anchor = date.fromisoformat(acquired) if acquired else EPOCH
@@ -295,15 +315,17 @@ def test_the_settled_watering_keeps_the_identity_it_had_while_it_was_due(
         )
         assert ics_uid(expected) == f"task-{expected}@herbology"
 
-    # And the identity does not move with the day it is read on. This is what
-    # makes the cancellation above a cancellation rather than a second event:
-    # the outstanding watering is one occurrence held at one id for as long as
-    # it goes undone, however many mornings it is looked at.
-    later = tasks_by_specimen(
-        rounds(client, a_day_the_weather_does_not_cover)["satisfied"]
-    )
-    for specimen_id in SETTLED_BY_THE_RAIN:
-        assert later[specimen_id]["id"] == satisfied[specimen_id]["id"], (
-            "the outstanding watering changed identity between two readings, "
-            "which would put a second event in every subscribed calendar"
-        )
+    # And the identity does not move with the day the round is read on. This is
+    # what makes the cancellation above a cancellation rather than a second
+    # event: the outstanding watering is one occurrence held at one id for as
+    # long as it goes undone, however many mornings it is looked at.
+    later = (date.fromisoformat(rain_day_of("storm")) + timedelta(days=2)).isoformat()
+    for specimen_id, task in tasks_by_specimen(
+        rounds(storm, later)["satisfied"]
+    ).items():
+        if specimen_id in SETTLED_BY_THE_RAIN:
+            assert task["id"] == satisfied[specimen_id]["id"], (
+                "the outstanding watering changed identity between two "
+                "readings, which would put a second event in every "
+                "subscribed calendar"
+            )

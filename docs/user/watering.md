@@ -96,6 +96,26 @@ Subscribed feeds refresh slowly. Google in particular can take twelve hours or
 more. If you need a watering to reach your phone sooner, the Ministry Office
 offers direct push instead.
 
+## Seeing it happen before you trust it
+
+You do not have to wait for weather to find out whether any of this works. The
+Ministry ships three recorded weeks — a storm, a drought and a frost — and you
+can stand the whole app inside one of them:
+
+```
+MOH_WEATHER_SCENARIO=storm
+MOH_WEATHER_SCENARIO_DAY=2026-07-07
+```
+
+That is the morning after 38 mm of rain. Open Morning Rounds and the terrace
+lemon is in **settled without you**, marked as covered by the rain, while the
+two plants on the covered porch are still asking to be watered. Set
+`MOH_WEATHER_SCENARIO=drought` instead and nothing is ever settled: the
+deficits climb for three weeks and the waterings stay due.
+
+Leave both unset — which is how the Ministry ships — and you get your own
+weather.
+
 ---
 
 *See also: [Reading care values, sources and confidence](README.md) · the
