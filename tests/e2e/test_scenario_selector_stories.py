@@ -130,15 +130,20 @@ def test_the_storm_cancels_its_settled_waterings_in_the_calendar(storm: Any) -> 
 #: not reset — but the mock path is what every demo, every screen J builds and
 #: this suite run on. `api/almanac/` is Workstream E's, so this is escalated
 #: rather than worked around. Strict, so it fails the day it starts passing.
-CANNOT_YET_BE_MET = {
-    "01890040-0000-7000-8000-000000000006": (
-        "The Almanac replays only BALANCE_DAYS = 14 days from a zero deficit, "
-        "and the lavender hedge needs 15 to cross its threshold — so this "
-        "fixture promise (by_day 15, held by the engine over the full "
-        "recording) cannot be reached through the API. Raised with Workstream "
-        "A for E. Delete this entry when the window carries a starting deficit."
-    ),
-}
+#: Empty, and kept empty deliberately.
+#:
+#: The lavender hedge lived here: the Almanac replayed only `BALANCE_DAYS = 14`
+#: days from a zero deficit, so an in-ground plant on a deep profile needed 15
+#: days to cross its threshold and could never be reported due through the API
+#: — it read `ok` however long the drought ran. Workstream E fixed it in #34:
+#: the replay now covers the whole recording and only the per-day array is
+#: trimmed for the screen. The entry's own instruction was "delete this entry
+#: when the window carries a starting deficit", and it now does.
+#:
+#: The machinery stays because the escalation worked: a fixture promise the API
+#: cannot keep is recorded here, strictly, so it fails the day it starts
+#: passing. That is exactly how this one was found and closed.
+CANNOT_YET_BE_MET: dict[str, str] = {}
 
 
 def drought_rows() -> list[Any]:
