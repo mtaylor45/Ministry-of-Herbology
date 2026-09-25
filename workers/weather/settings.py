@@ -18,7 +18,7 @@ be about their own inputs, so they are worth reading rather than skimming:
     is reported as ``unknown`` rather than merely degraded. ADR 0016 gives us a
     local fallback so a gap is rare; this is what happens when even that fails.
 
-``weather_scenario`` / ``weather_scenario_day``
+``scenario`` / ``scenario_day``
     Which recorded weather this deployment is standing in, and which day of it
     is "today". Both are operator inputs in the sense ADR 0019 means: a
     parameter with no usable default, unset in every shipped deployment, and
@@ -31,13 +31,24 @@ be about their own inputs, so they are worth reading rather than skimming:
     Both are read by the API *and* by the worker, from the same settings
     object, so the endpoint and the job that writes ``water_balance`` cannot
     disagree about what the weather was.
+
+    **On the name.** These shipped in S5 as ``weather_scenario`` /
+    ``MOH_WEATHER_SCENARIO``. L's suite was written against ``scenario`` /
+    ``MOH_SCENARIO`` and skipped itself until the field existed, and L is right
+    on the merits: the ``MOH_`` prefix already scopes the variable, no other
+    field on this class carries a ``weather_`` prefix, and five end-to-end tests
+    of the sprint's own exit criterion were sitting skipped over the
+    disagreement. So ``scenario`` is the name. ``MOH_WEATHER_SCENARIO`` and
+    ``MOH_WEATHER_SCENARIO_DAY`` keep working as aliases, because they were
+    documented in a merged pull request and an operator may already have them in
+    a ``.env``; they are not the name and should not be written down again.
 """
 
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -52,7 +63,14 @@ DEFAULT_USER_AGENT = (
 
 class WeatherSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="MOH_", env_file=".env", extra="ignore"
+        env_prefix="MOH_",
+        env_file=".env",
+        extra="ignore",
+        # ``scenario`` carries an explicit ``validation_alias`` so the variable it
+        # shipped under keeps working. An alias otherwise *replaces* the field
+        # name, which silently stopped ``WeatherSettings(scenario=...)`` from
+        # populating it — and with it the path check on the way in.
+        populate_by_name=True,
     )
 
     #: With no network (or no database) the worker answers from the recordings
@@ -86,15 +104,30 @@ class WeatherSettings(BaseSettings):
     #: ``drought``, ``storm`` or ``frost`` today, and whatever L adds next.
     #: ``None`` (the shipped default) means the baseline recording, which is
     #: what every deployment gets until an operator asks for something else.
-    weather_scenario: str | None = None
+    #:
+    #: ``MOH_SCENARIO``, with ``MOH_WEATHER_SCENARIO`` accepted as the alias the
+    #: setting shipped under in S5. See the module docstring on the name.
+    scenario: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("MOH_SCENARIO", "MOH_WEATHER_SCENARIO"),
+    )
 
     #: Which day of that recording is "today". The water balance is a history
     #: ending now, so a scenario replayed past its rain shows the deficit that
     #: has since rebuilt — which is correct, and is not what somebody wanting to
     #: *see* the rain land is asking for. Unset means the recording's last day.
-    weather_scenario_day: date | None = None
+    #:
+    #: A scenario that ends *on* the day it is about needs none of this, which is
+    #: how L re-cut ``storm``: the rain now falls on its last day. The setting
+    #: stays because ``drought`` and ``frost`` are both about a day in the middle
+    #: of a series, and because an operator reading a recording forwards wants to
+    #: stop somewhere.
+    scenario_day: date | None = Field(
+        default=None,
+        validation_alias=AliasChoices("MOH_SCENARIO_DAY", "MOH_WEATHER_SCENARIO_DAY"),
+    )
 
-    @field_validator("weather_scenario")
+    @field_validator("scenario")
     @classmethod
     def _scenario_is_a_plain_name(cls, value: str | None) -> str | None:
         """A scenario name becomes a path, so it may only be a bare name.
@@ -112,8 +145,8 @@ class WeatherSettings(BaseSettings):
             return None
         if not name.replace("_", "").replace("-", "").isalnum():
             raise ValueError(
-                "MOH_WEATHER_SCENARIO must be a plain fixture name such as "
-                f"'storm' (letters, digits, '-' and '_'), not {value!r}"
+                "MOH_SCENARIO must be a plain fixture name such as 'storm' "
+                f"(letters, digits, '-' and '_'), not {value!r}"
             )
         return name
 

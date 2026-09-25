@@ -51,8 +51,18 @@ from workers.weather.tasks import (
 
 from app import fixtures
 
-#: How much history the water-balance endpoint replays. Long enough to show a
+#: How many days of the balance the endpoint *shows*. Long enough to see a
 #: deficit building and rain clearing it; short enough to be one screen.
+#:
+#: **Not how many days it replays.** It was both until L's drought story ran the
+#: selector over a 21-day recording: a 14-day window restarts the deficit at zero
+#: a fortnight ago, and an in-ground plant drawing on a 60 mm profile never gets
+#: there. The lavender hedge read 34.02 mm — comfortable — where the weather says
+#: 51.03 mm and the fixture says due by day 15. The worker replays the whole
+#: recording and said `due`; the endpoint said `ok`; nothing compared them.
+#:
+#: A deficit is what the weather did, not what the last fortnight of it did, so
+#: the replay now covers everything available and only the display is trimmed.
 BALANCE_DAYS = 14
 
 #: Namespace for deterministic alert ids. The contract types ``FrostAlert.id``
@@ -82,7 +92,7 @@ def forecast(
     field the parser drops is a field the Almanac stops showing, and somebody
     finds out here rather than in production.
 
-    Under a selected scenario (``MOH_WEATHER_SCENARIO``) it is that recording
+    Under a selected scenario (``MOH_SCENARIO``) it is that recording
     instead, starting at the day the operator is standing on: a forecast is the
     days ahead of now, and a deployment whose water balance has just been
     cleared by rain must not show a forecast from the week before it fell.
@@ -263,19 +273,26 @@ def water_balance(
     if context is None:
         return None
 
+    # Every day available, not the last ``BALANCE_DAYS`` — see that constant.
     series = run_balance(
-        world.weather_days(settings, limit=BALANCE_DAYS),
+        world.weather_days(settings),
         k_c=context.k_c,
         capacity=context.capacity_mm,
         cover_factor=context.cover_factor,
         latitude=world.site(settings).latitude,
         sensor_override_pct=context.sensor_override_pct,
     )
-    return serialise_balance(specimen_id, series, is_outdoor=context.is_outdoor)
+    return serialise_balance(
+        specimen_id, series, is_outdoor=context.is_outdoor, show_days=BALANCE_DAYS
+    )
 
 
 def serialise_balance(
-    specimen_id: str, series: BalanceSeries, *, is_outdoor: bool = True
+    specimen_id: str,
+    series: BalanceSeries,
+    *,
+    is_outdoor: bool = True,
+    show_days: int | None = None,
 ) -> dict[str, Any]:
     """``WaterBalance``, plus the honesty the frozen schema does not yet carry.
 
@@ -286,7 +303,13 @@ def serialise_balance(
     number returned without them is a degraded answer wearing a clean one's
     clothes. Adding them to ``WaterBalance`` in the contract is requested of A
     in the S3 pull request (rule 1 — they are not added here).
+
+    ``show_days`` trims the per-day array for the screen. It trims *only* that:
+    ``deficit_mm``, ``status`` and the assessment all come from the full replay,
+    because they are facts about the whole series. Trimming the replay instead
+    is the bug :data:`BALANCE_DAYS` now documents.
     """
+    shown = series.days if show_days is None else series.days[-show_days:]
     payload: dict[str, Any] = {
         "specimen_id": specimen_id,
         "deficit_mm": round(series.deficit_mm, 2),
@@ -295,7 +318,7 @@ def serialise_balance(
         "k_c": series.k_c.effective,
         "is_due": series.is_due,
         "sensor_override_pct": series.sensor_override_pct,
-        "days": [day.to_dict() for day in series.days],
+        "days": [day.to_dict() for day in shown],
         "status": series.status,
         "satisfied_by": series.satisfied_by,
         "cover_factor": series.cover_factor,

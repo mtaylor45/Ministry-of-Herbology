@@ -7,23 +7,39 @@ So the app was permanently on ``weather/baseline_30d.json``, and the sprint's
 exit criterion — *rain visibly clears due waterings* — could not be shown to
 anybody, in a test or in a browser.
 
-``MOH_WEATHER_SCENARIO`` and ``MOH_WEATHER_SCENARIO_DAY`` are that switch. They
-are operator inputs under ADR 0019: no usable default, unset in every shipped
-deployment, and documented rather than discovered. These tests hold the two
-properties that make them worth having — the API and the worker read the *same*
-setting, and an unset setting changes nothing at all.
+``MOH_SCENARIO`` and ``MOH_SCENARIO_DAY`` are that switch. They are operator
+inputs under ADR 0019: no usable default, unset in every shipped deployment, and
+documented rather than discovered. These tests hold the two properties that make
+them worth having — the API and the worker read the *same* setting, and an unset
+setting changes nothing at all.
+
+**Nothing here restates what is in a fixture.** The first version of this file
+hard-coded ``storm``'s rain on 2026-07-07, and L — who owns ``fixtures/`` — re-cut
+the recording so the rain falls on its *last* day, which is the better fixture and
+broke six of these tests. A test that copies a number out of a file it does not
+own has taken a second, stale copy of somebody else's data. So the rain day is
+*found* in the recording, the way the engine finds it.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from workers.weather import world
 from workers.weather.settings import WeatherSettings
 
-STORM_RAIN = date(2026, 7, 7)
+
+def rain_day(settings: WeatherSettings, scenario: str) -> date:
+    """The day the recording's rain falls, read from the recording itself."""
+    wet = [
+        row
+        for row in world.weather_rows(settings, scenario=scenario)
+        if row["precip_mm"]
+    ]
+    assert len(wet) == 1, f"{scenario} is no longer a single-downpour recording"
+    return date.fromisoformat(wet[0]["date"])
 
 
 @pytest.fixture
@@ -33,7 +49,20 @@ def baseline(settings: WeatherSettings) -> WeatherSettings:
 
 @pytest.fixture
 def storm(settings: WeatherSettings) -> WeatherSettings:
-    return settings.model_copy(update={"weather_scenario": "storm"})
+    return settings.model_copy(update={"scenario": "storm"})
+
+
+@pytest.fixture
+def storm_on_the_rain_day(settings: WeatherSettings) -> WeatherSettings:
+    """``storm``, standing on the day it rains — stated, not assumed.
+
+    ``storm`` has been re-cut twice inside this sprint: the downpour on the
+    closing day in one shape, mid-series with trailing dry days in another. Both
+    are L's call over L's file, so nothing here depends on which it is. Setting
+    the day is a no-op in the first shape and the whole point in the second.
+    """
+    base = settings.model_copy(update={"scenario": "storm"})
+    return base.model_copy(update={"scenario_day": rain_day(base, "storm")})
 
 
 # ------------------------------------------------------------------ the switch
@@ -54,26 +83,29 @@ def test_selecting_a_scenario_changes_what_the_weather_is(storm):
     days = world.weather_days(storm)
     assert days[0].day == date(2026, 7, 1)
     assert [day.precip_mm for day in days if day.precip_mm] == [38.0]
+    assert rain_day(storm, "storm") in {day.day for day in days}
 
 
-def test_the_as_of_day_ends_the_series_there(storm):
+def test_the_as_of_day_ends_the_series_there(storm, storm_on_the_rain_day):
     """The balance is a history that ends *now*, so "now" has to be sayable.
 
-    ``storm`` runs three days past its downpour. Replayed whole, the deficit
-    has already rebuilt and the series honestly reports ``ok`` — which is the
-    right answer to a question nobody was asking. An operator who wants to
-    watch the rain land stands on the day it fell.
+    This is what the setting is *for*: a recording whose interesting day is not
+    its last one. ``drought`` and ``frost`` are both about a day in the middle,
+    and ``storm`` has been cut both ways inside one sprint.
     """
-    settings = storm.model_copy(update={"weather_scenario_day": STORM_RAIN})
-    days = world.weather_days(settings)
-    assert days[-1].day == STORM_RAIN
-    assert days[-1].precip_mm == 38.0
+    wet = rain_day(storm, "storm")
+    assert world.weather_days(storm_on_the_rain_day)[-1].day == wet
+    assert world.weather_days(storm_on_the_rain_day)[-1].precip_mm == 38.0
+
+    stopped_early = storm.model_copy(update={"scenario_day": wet - timedelta(days=2)})
+    days = world.weather_days(stopped_early)
+    assert days[-1].day == wet - timedelta(days=2)
+    assert all(day.precip_mm == 0.0 for day in days), "stopped before the rain"
 
     # An explicit argument still wins, which is what the worker's
     # ``evaluate_water_balance(day=...)`` has always done.
-    assert world.weather_days(settings, through=date(2026, 7, 3))[-1].day == date(
-        2026, 7, 3
-    )
+    through = days[0].day
+    assert world.weather_days(storm, through=through)[-1].day == through
 
 
 def test_the_forecast_rows_and_the_balance_days_come_from_one_loader(storm):
@@ -91,14 +123,16 @@ def test_the_frost_guard_follows_the_operator_s_scenario_too(baseline, storm):
     the baseline is a mild fortnight in May, and a frost endpoint that answers
     "nothing, ever" is not a mock of anything.
     """
-    assert min(night.low_c for night in world.frost_nights(baseline)) == -2.0
-    assert min(night.low_c for night in world.frost_nights(storm)) == 16.0
-    assert world.frost_nights(storm, scenario="frost")[0].low_c == 14.0
+    frost_lows = [night.low_c for night in world.frost_nights(baseline)]
+    storm_lows = [night.low_c for night in world.frost_nights(storm)]
+    assert min(frost_lows) < 0.0, "the baseline falls through to the frost recording"
+    assert min(storm_lows) > 10.0, "a July storm has no frost in it"
+    assert world.frost_nights(storm, scenario="frost")[0].low_c == frost_lows[0]
 
 
 def test_a_scenario_that_does_not_exist_says_so(settings):
     """A typo must not read as "fine, no weather" (ADR 0010)."""
-    bad = settings.model_copy(update={"weather_scenario": "sotrm"})
+    bad = settings.model_copy(update={"scenario": "sotrm"})
     with pytest.raises(ValueError, match="names no recording"):
         world.weather_rows(bad)
 
@@ -107,15 +141,15 @@ def test_a_scenario_name_may_not_be_a_path():
     """It is interpolated into a filename, so it is checked on the way in."""
     for attempt in ("../../etc/passwd", "storm/../../secrets", "a b"):
         with pytest.raises(ValueError, match="plain fixture name"):
-            WeatherSettings(weather_scenario=attempt)
-    assert WeatherSettings(weather_scenario="  storm  ").weather_scenario == "storm"
-    assert WeatherSettings(weather_scenario="").weather_scenario is None
+            WeatherSettings(scenario=attempt)
+    assert WeatherSettings(scenario="  storm  ").scenario == "storm"
+    assert WeatherSettings(scenario="").scenario is None
 
 
 # -------------------------------------------------- the API and the worker agree
 
 
-def test_the_endpoint_and_the_job_read_the_same_setting(storm, run):
+def test_the_endpoint_and_the_job_read_the_same_setting(storm_on_the_rain_day, run):
     """The one property worth a test all of its own.
 
     If the Almanac resolved the scenario and the worker did not, a deployment
@@ -127,7 +161,7 @@ def test_the_endpoint_and_the_job_read_the_same_setting(storm, run):
 
     from workers.weather import tasks
 
-    settings = storm.model_copy(update={"weather_scenario_day": STORM_RAIN})
+    settings = storm_on_the_rain_day
     lemon = "01890040-0000-7000-8000-000000000004"  # 45 L, open sky
 
     report = run(tasks.evaluate_water_balance({"settings": settings}))
@@ -148,17 +182,18 @@ def test_the_frost_lookahead_is_not_cut_off_at_today(settings):
     quiet-app failure ADR 0010 is about, with a dead lemon at the end of it
     rather than a stale number.
     """
+    all_nights = world.frost_nights(settings.model_copy(update={"scenario": "frost"}))
+    coldest = min(all_nights, key=lambda night: night.low_c)
+    two_nights_before = coldest.day - timedelta(days=2)
+
     under_frost = settings.model_copy(
-        update={
-            "weather_scenario": "frost",
-            "weather_scenario_day": date(2026, 10, 21),
-        }
+        update={"scenario": "frost", "scenario_day": two_nights_before}
     )
-    assert world.weather_days(under_frost)[-1].day == date(2026, 10, 21)
+    assert world.weather_days(under_frost)[-1].day == two_nights_before
 
     nights = world.frost_nights(under_frost)
-    assert max(night.day for night in nights) == date(2026, 10, 28)
-    assert min(night.low_c for night in nights) == -2.0, "the freeze is still seen"
+    assert max(night.day for night in nights) == max(n.day for n in all_nights)
+    assert min(night.low_c for night in nights) == coldest.low_c, "the freeze is seen"
 
     from almanac import service as almanac
 
@@ -175,10 +210,7 @@ def test_a_day_outside_the_recording_is_refused(settings):
     that needs nothing, which is the one failure this engine may never produce.
     """
     out_of_range = settings.model_copy(
-        update={
-            "weather_scenario": "storm",
-            "weather_scenario_day": date(2026, 1, 1),
-        }
+        update={"scenario": "storm", "scenario_day": date(2026, 1, 1)}
     )
     with pytest.raises(ValueError, match="outside scenarios/storm.json"):
         world.weather_days(out_of_range)
